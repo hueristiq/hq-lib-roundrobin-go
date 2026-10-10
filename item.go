@@ -1,25 +1,20 @@
 package roundrobin
 
-// Item represents an element in the round-robin cycle, holding a value and its usage statistics.
+// item is a single element of a [RoundRobin] cycle, pairing a value with its
+// selection weight, its smooth weighted selection state, and its usage
+// statistics. Items are always handled through pointers so an item's statistics
+// stay reachable through [RoundRobin.StatisticsOf] regardless of slice moves or
+// removal.
+//
 // Fields:
-//   - value (string): The string value associated with the item.
-//   - Statistics (Statistics): Metrics tracking the item's usage, such as serve count.
-type Item struct {
-	value      string
-	Statistics Statistics
+//   - value (T): the value handed back by [RoundRobin.Next].
+//   - weight (int): the relative selection weight; always at least 1.
+//   - currentWeight (int64): the smooth weighted round-robin state, mutated on
+//     every weighted selection while holding [RoundRobin.mu].
+//   - statistics (Statistics): the per-item usage metrics, updated atomically.
+type item[T comparable] struct {
+	value         T
+	weight        int
+	currentWeight int64
+	statistics    Statistics
 }
-
-// Value returns the string value of the Item.
-// Returns:
-//   - value (string): The string value stored in the Item.
-func (i Item) Value() (value string) {
-	value = i.value
-
-	return
-}
-
-type ItemInterface interface {
-	Value() (value string)
-}
-
-var _ ItemInterface = (*Item)(nil)

@@ -2,30 +2,37 @@ package roundrobin
 
 import "sync/atomic"
 
-// Statistics holds metrics for an Item, tracking how many times it has been served.
+// Statistics holds the usage metrics of a single item in a [RoundRobin] cycle.
+//
+// The counters are read and written atomically, so a *Statistics obtained through
+// [RoundRobin.StatisticsOf] stays valid for the lifetime of the round-robin
+// instance — even after the item is removed from the cycle, though it then no
+// longer changes.
+//
 // Fields:
-//   - ServesCount (int32): The number of times the item has been selected in the round-robin cycle.
+//   - servesCount (atomic.Int64): the number of times the item has been served by
+//     [RoundRobin.Next].
 type Statistics struct {
-	ServesCount int32
+	servesCount atomic.Int64
 }
 
-// IncrementServesCount atomically increments the ServesCount by the specified value.
-// This ensures thread-safe updates to the serve counter.
-// Parameters:
-//   - value (int32): The amount to increment ServesCount by, typically 1.
-func (s *Statistics) IncrementServesCount(value int32) {
-	atomic.AddInt32(&s.ServesCount, value)
+// ServesCount returns how many times the item has been served.
+//
+// Returns:
+//   - n (int64): the current serve count.
+func (s *Statistics) ServesCount() (n int64) {
+	n = s.servesCount.Load()
+
+	return
 }
 
-// ResetServesCount atomically resets the ServesCount to zero.
-// This is used to clear usage metrics when necessary.
+// ResetServesCount atomically resets the serve count to zero.
 func (s *Statistics) ResetServesCount() {
-	atomic.StoreInt32(&s.ServesCount, 0)
+	s.servesCount.Store(0)
 }
 
-type StatisticsInterface interface {
-	IncrementServesCount(value int32)
-	ResetServesCount()
+// incrementServesCount atomically increments the serve count by one. It is called
+// by [RoundRobin.Next] for the served item.
+func (s *Statistics) incrementServesCount() {
+	s.servesCount.Add(1)
 }
-
-var _ StatisticsInterface = (*Statistics)(nil)
