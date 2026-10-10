@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	hqgoroundrobin "github.com/hueristiq/hq-go-roundrobin"
+	hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
 )
 
 func TestNew_ZeroItems(t *testing.T) {

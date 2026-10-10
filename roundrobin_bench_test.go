@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	hqgoroundrobin "github.com/hueristiq/hq-go-roundrobin"
+	hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
 )
 
 // nextSink keeps benchmark results alive so the compiler cannot optimise the

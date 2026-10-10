@@ -1,4 +1,4 @@
-module github.com/hueristiq/hq-go-roundrobin
+module github.com/hueristiq/hq-lib-roundrobin-go
 
 go 1.26.3
 

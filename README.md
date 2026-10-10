@@ -1,8 +1,8 @@
-# hq-go-roundrobin
+# hq-lib-roundrobin-go
 
-![made with go](https://img.shields.io/badge/made%20with-Go-1E90FF.svg) [![go reference](https://pkg.go.dev/badge/github.com/hueristiq/hq-go-roundrobin.svg)](https://pkg.go.dev/github.com/hueristiq/hq-go-roundrobin) [![license](https://img.shields.io/badge/license-MIT-gray.svg?color=1E90FF)](https://github.com/hueristiq/hq-go-roundrobin/blob/main/LICENSE) ![maintenance](https://img.shields.io/badge/maintained%3F-yes-1E90FF.svg) [![open issues](https://img.shields.io/github/issues-raw/hueristiq/hq-go-roundrobin.svg?style=flat&color=1E90FF)](https://github.com/hueristiq/hq-go-roundrobin/issues?q=is:issue+is:open) [![closed issues](https://img.shields.io/github/issues-closed-raw/hueristiq/hq-go-roundrobin.svg?style=flat&color=1E90FF)](https://github.com/hueristiq/hq-go-roundrobin/issues?q=is:issue+is:closed) [![contribution](https://img.shields.io/badge/contributions-welcome-1E90FF.svg)](https://github.com/hueristiq/hq-go-roundrobin/blob/main/CONTRIBUTING.md)
+![made with go](https://img.shields.io/badge/made%20with-Go-1E90FF.svg) [![go reference](https://pkg.go.dev/badge/github.com/hueristiq/hq-lib-roundrobin-go.svg)](https://pkg.go.dev/github.com/hueristiq/hq-lib-roundrobin-go) [![license](https://img.shields.io/badge/license-MIT-gray.svg?color=1E90FF)](https://github.com/hueristiq/hq-lib-roundrobin-go/blob/main/LICENSE) ![maintenance](https://img.shields.io/badge/maintained%3F-yes-1E90FF.svg) [![open issues](https://img.shields.io/github/issues-raw/hueristiq/hq-lib-roundrobin-go.svg?style=flat&color=1E90FF)](https://github.com/hueristiq/hq-lib-roundrobin-go/issues?q=is:issue+is:open) [![closed issues](https://img.shields.io/github/issues-closed-raw/hueristiq/hq-lib-roundrobin-go.svg?style=flat&color=1E90FF)](https://github.com/hueristiq/hq-lib-roundrobin-go/issues?q=is:issue+is:closed) [![contribution](https://img.shields.io/badge/contributions-welcome-1E90FF.svg)](https://github.com/hueristiq/hq-lib-roundrobin-go/blob/main/CONTRIBUTING.md)
 
-`hq-go-roundrobin` is a [Go](https://golang.org/) package providing a generic, concurrency-safe [round-robin](https://en.wikipedia.org/wiki/Round-robin_scheduling) selector: it cycles through a set of items, handing out one per call, optionally serving some items more often than others through weights.
+`hq-lib-roundrobin-go` is a [Go](https://golang.org/) package providing a generic, concurrency-safe [round-robin](https://en.wikipedia.org/wiki/Round-robin_scheduling) selector: it cycles through a set of items, handing out one per call, optionally serving some items more often than others through weights.
 
 ## Resources
 
@@ -28,10 +28,10 @@
 
 ## Installation
 
-To install `hq-go-roundrobin`, run the following command in your Go project:
+To install `hq-lib-roundrobin-go`, run the following command in your Go project:
 
 ```bash
-go get -v -u github.com/hueristiq/hq-go-roundrobin
+go get -v -u github.com/hueristiq/hq-lib-roundrobin-go
 ```
 
 ## Usage
@@ -39,7 +39,7 @@ go get -v -u github.com/hueristiq/hq-go-roundrobin
 The examples below import the package under the `hqgoroundrobin` alias.
 
 ```go
-import hqgoroundrobin "github.com/hueristiq/hq-go-roundrobin"
+import hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
 ```
 
 ### Basic Rotation
@@ -52,7 +52,7 @@ package main
 import (
 	"fmt"
 
-	hqgoroundrobin "github.com/hueristiq/hq-go-roundrobin"
+	hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
 )
 
 func main() {
@@ -86,7 +86,7 @@ package main
 import (
 	"fmt"
 
-	hqgoroundrobin "github.com/hueristiq/hq-go-roundrobin"
+	hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
 )
 
 func main() {
@@ -118,7 +118,7 @@ package main
 import (
 	"fmt"
 
-	hqgoroundrobin "github.com/hueristiq/hq-go-roundrobin"
+	hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
 )
 
 func main() {
@@ -166,7 +166,7 @@ package main
 import (
 	"fmt"
 
-	hqgoroundrobin "github.com/hueristiq/hq-go-roundrobin"
+	hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
 )
 
 func main() {
@@ -201,12 +201,12 @@ Weights are not an option but a per-item property: pass them through `AddWithWei
 
 ## Contributing
 
-Contributions are welcome and encouraged! Feel free to submit [Pull Requests](https://github.com/hueristiq/hq-go-roundrobin/pulls) or report [Issues](https://github.com/hueristiq/hq-go-roundrobin/issues). For more details, check out the [contribution guidelines](https://github.com/hueristiq/hq-go-roundrobin/blob/main/CONTRIBUTING.md).
+Contributions are welcome and encouraged! Feel free to submit [Pull Requests](https://github.com/hueristiq/hq-lib-roundrobin-go/pulls) or report [Issues](https://github.com/hueristiq/hq-lib-roundrobin-go/issues). For more details, check out the [contribution guidelines](https://github.com/hueristiq/hq-lib-roundrobin-go/blob/main/CONTRIBUTING.md).
 
-A big thank you to all the [contributors](https://github.com/hueristiq/hq-go-roundrobin/graphs/contributors) for your ongoing support!
+A big thank you to all the [contributors](https://github.com/hueristiq/hq-lib-roundrobin-go/graphs/contributors) for your ongoing support!
 
-![contributors](https://contrib.rocks/image?repo=hueristiq/hq-go-roundrobin&max=500)
+![contributors](https://contrib.rocks/image?repo=hueristiq/hq-lib-roundrobin-go&max=500)
 
 ## Licensing
 
-This package is licensed under the [MIT license](https://opensource.org/license/mit). You are free to use, modify, and distribute it, as long as you follow the terms of the license. You can find the full license text in the repository - [Full MIT license text](https://github.com/hueristiq/hq-go-roundrobin/blob/main/LICENSE).
+This package is licensed under the [MIT license](https://opensource.org/license/mit). You are free to use, modify, and distribute it, as long as you follow the terms of the license. You can find the full license text in the repository - [Full MIT license text](https://github.com/hueristiq/hq-lib-roundrobin-go/blob/main/LICENSE).
