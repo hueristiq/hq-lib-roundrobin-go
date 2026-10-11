@@ -44,7 +44,7 @@ import hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
 
 ### Basic Rotation
 
-Use `New` with at least one item; every call to `Next` serves the next item in the cycle, wrapping around in insertion order:
+Use `New` with at least one item; it fails with `ErrNoItems` when the list is empty. Every call to `Next` serves the next item in the cycle, wrapping around in insertion order:
 
 ```go
 package main
@@ -110,7 +110,7 @@ func main() {
 
 ### Weighted Selection
 
-Use `AddWithWeight` to make some items be served more often. Once any item carries a non-default weight, selection switches to smooth weighted round-robin: over every window of `sum(weights)` selections each item is picked exactly `weight` times, spread across the window. Adding a weight of `3` to one of three items:
+Use `AddWithWeight` to make some items be served more often. Once any item carries a non-default weight, selection switches to smooth weighted round-robin: over every window of `sum(weights)` selections each item is picked exactly `weight` times, spread across the window. When every item again carries the default weight — weights reset to `1`, or the weighted items removed — selection returns to strict rotation in insertion order. Adding a weight of `3` to one of two items:
 
 ```go
 package main
@@ -197,7 +197,7 @@ Behavior is set through functional options passed to `New`. Any option left unse
 | --- | --- | --- |
 | `WithRotateAmount(n)` | Number of times in a row one item is served before the selection advances to the next item. A value `<= 0` falls back to the default. | `DefaultRotateAmount` (`1`) |
 
-Weights are not an option but a per-item property: pass them through `AddWithWeight` (a non-positive weight falls back to `1`). While every item carries the default weight, the cycle is strict rotation in insertion order; as soon as an item carries a different weight, selection becomes smooth weighted round-robin.
+Weights are not an option but a per-item property: pass them through `AddWithWeight` (a non-positive weight falls back to `DefaultWeight`, which is `1`). While every item carries the default weight, the cycle is strict rotation in insertion order; as soon as an item carries a different weight, selection becomes smooth weighted round-robin, and it returns to strict rotation once every weight is back to the default.
 
 ## Contributing
 

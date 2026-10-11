@@ -13,10 +13,13 @@ import (
 // less than or equal to 0 is normalized back to the default.
 const DefaultRotateAmount int32 = 1
 
-// defaultWeight is the selection weight of items added through [RoundRobin.Add],
+// DefaultWeight is the selection weight of items added through [RoundRobin.Add],
 // and the value non-positive weights passed to [RoundRobin.AddWithWeight] are
 // normalized to.
-const defaultWeight = 1
+const DefaultWeight = 1
+
+// ErrNoItems is returned by [New] when no items are provided.
+var ErrNoItems = errors.New("roundrobin.New: no items")
 
 // options holds the configurable knobs of a [RoundRobin], populated through
 // [OptionFunc] values passed to [New].
@@ -62,9 +65,10 @@ func WithRotateAmount(rotateAmount int32) (of OptionFunc) {
 // weight, the cycle is strict rotation in insertion order. Once an item carries
 // a different weight (see [RoundRobin.AddWithWeight]), selection switches to
 // smooth weighted round-robin: over every window of sum(weights) selections each
-// item is picked exactly weight times, spread across the window. Removing items
-// perturbs the order of the very next picks, but the long-run distribution stays
-// proportional to the weights.
+// item is picked exactly weight times, spread across the window. Once every item
+// carries the default weight again, selection returns to strict rotation.
+// Removing items perturbs the order of the very next picks, but the long-run
+// distribution stays proportional to the weights.
 //
 // The zero value is not usable; construct through [New].
 //
@@ -83,8 +87,9 @@ func WithRotateAmount(rotateAmount int32) (of OptionFunc) {
 //   - rotateAmount (int32): the number of consecutive serves of one item before
 //     the selection advances; always at least 1.
 //   - totalWeight (int64): the sum of the weights of all items in the cycle.
-//   - weighted (bool): whether any item ever carried a non-default weight,
-//     switching selection from strict rotation to smooth weighted round-robin.
+//   - weighted (bool): whether any item currently carries a non-default weight,
+//     switching selection from strict rotation to smooth weighted round-robin;
+//     recomputed on every addition and removal.
 type RoundRobin[T comparable] struct {
 	mu           sync.Mutex
 	items        []*item[T]
@@ -111,12 +116,10 @@ type RoundRobin[T comparable] struct {
 //
 // Returns:
 //   - rr (*RoundRobin[T]): the new round-robin instance.
-//   - err (error): non-nil when items is empty.
+//   - err (error): [ErrNoItems] when items is empty.
 func New[T comparable](items []T, ofs ...OptionFunc) (rr *RoundRobin[T], err error) {
 	if len(items) == 0 {
-		err = errors.New("roundrobin.New: no items")
-
-		return
+		return nil, ErrNoItems
 	}
 
 	opts := &options{
@@ -140,10 +143,10 @@ func New[T comparable](items []T, ofs ...OptionFunc) (rr *RoundRobin[T], err err
 
 	rr.Add(items...)
 
-	return
+	return rr, nil
 }
 
-// Add appends items to the cycle, each with the default weight. Values already
+// Add appends items to the cycle, each with [DefaultWeight]. Values already
 // in the cycle are skipped: their weight and statistics are preserved.
 //
 // Parameters:
@@ -160,29 +163,30 @@ func (r *RoundRobin[T]) Add(items ...T) {
 
 		it := &item[T]{
 			value:  value,
-			weight: defaultWeight,
+			weight: DefaultWeight,
 		}
 
 		r.items = append(r.items, it)
 		r.index[value] = it
-		r.totalWeight += defaultWeight
+		r.totalWeight += DefaultWeight
 	}
 }
 
-// AddWithWeight adds a single item with the given selection weight, switching
-// selection to smooth weighted round-robin: over every window of sum(weights)
-// selections the item is picked weight times, its picks spread across the
-// window.
+// AddWithWeight adds a single item with the given selection weight. While any
+// item carries a non-default weight, selection runs smooth weighted
+// round-robin: over every window of sum(weights) selections the item is picked
+// weight times, its picks spread across the window. Once every item carries the
+// default weight again, selection returns to strict rotation.
 //
 // Re-adding a value already in the cycle updates its weight and preserves its
-// statistics. A non-positive weight falls back to the default weight of 1.
+// statistics. A non-positive weight falls back to [DefaultWeight].
 //
 // Parameters:
 //   - value (T): the value to add.
 //   - weight (int): the relative selection weight of the item.
 func (r *RoundRobin[T]) AddWithWeight(value T, weight int) {
 	if weight <= 0 {
-		weight = defaultWeight
+		weight = DefaultWeight
 	}
 
 	r.mu.Lock()
@@ -204,9 +208,24 @@ func (r *RoundRobin[T]) AddWithWeight(value T, weight int) {
 		r.totalWeight += int64(weight)
 	}
 
-	if weight != defaultWeight {
-		r.weighted = true
+	r.updateWeighted()
+}
+
+// updateWeighted recomputes the weighted flag from the current item weights, so
+// selection falls back to strict rotation once every item carries the default
+// weight again. The caller must hold [RoundRobin.mu].
+func (r *RoundRobin[T]) updateWeighted() {
+	weighted := false
+
+	for _, it := range r.items {
+		if it.weight != DefaultWeight {
+			weighted = true
+
+			break
+		}
 	}
+
+	r.weighted = weighted
 }
 
 // Remove drops value from the cycle; removing a value that is not in the cycle
@@ -227,7 +246,7 @@ func (r *RoundRobin[T]) Remove(value T) (removed bool) {
 
 	it, exists := r.index[value]
 	if !exists {
-		return
+		return false
 	}
 
 	delete(r.index, value)
@@ -242,17 +261,17 @@ func (r *RoundRobin[T]) Remove(value T) (removed bool) {
 	// removed item was being served, step back and start a fresh run so the next
 	// advance lands on the removed item's successor (-1 is valid and wraps to
 	// the head of the cycle).
-	switch {
-	case i < r.current:
+	if i <= r.current {
+		if i == r.current {
+			r.serves = 0
+		}
+
 		r.current--
-	case i == r.current:
-		r.current--
-		r.serves = 0
 	}
 
-	removed = true
+	r.updateWeighted()
 
-	return
+	return true
 }
 
 // Next serves the next item in the cycle: the current item is served until it
@@ -273,7 +292,7 @@ func (r *RoundRobin[T]) Next() (value T) {
 	defer r.mu.Unlock()
 
 	if len(r.items) == 0 {
-		return
+		return value
 	}
 
 	if r.serves == 0 || r.serves >= r.rotateAmount {
@@ -287,9 +306,7 @@ func (r *RoundRobin[T]) Next() (value T) {
 	it := r.items[r.current]
 	it.statistics.incrementServesCount()
 
-	value = it.value
-
-	return
+	return it.value
 }
 
 // Items returns a snapshot copy of the values currently in the cycle, in cycle
@@ -308,7 +325,7 @@ func (r *RoundRobin[T]) Items() (items []T) {
 		items = append(items, it.value)
 	}
 
-	return
+	return items
 }
 
 // Len returns the number of items in the cycle.
@@ -320,9 +337,7 @@ func (r *RoundRobin[T]) Len() (n int) {
 
 	defer r.mu.Unlock()
 
-	n = len(r.items)
-
-	return
+	return len(r.items)
 }
 
 // StatisticsOf returns a live view of the serve statistics of the item carrying
@@ -342,11 +357,11 @@ func (r *RoundRobin[T]) StatisticsOf(value T) (statistics *Statistics, found boo
 	defer r.mu.Unlock()
 
 	it, found := r.index[value]
-	if found {
-		statistics = &it.statistics
+	if !found {
+		return nil, false
 	}
 
-	return
+	return &it.statistics, true
 }
 
 // advance moves the selection to the next item. While no item carries a

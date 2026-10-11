@@ -10,10 +10,11 @@
 // # Entry points
 //
 // [New] builds a [RoundRobin] over an initial set of items; at least one item is
-// required. [RoundRobin.Next] hands out the next item, following the selection
-// policy described below. Items can be added with [RoundRobin.Add] and
-// [RoundRobin.AddWithWeight], removed with [RoundRobin.Remove], and inspected
-// with [RoundRobin.Items], [RoundRobin.Len], and [RoundRobin.StatisticsOf].
+// required, or [New] fails with [ErrNoItems]. [RoundRobin.Next] hands out the
+// next item, following the selection policy described below. Items can be added
+// with [RoundRobin.Add] and [RoundRobin.AddWithWeight], removed with
+// [RoundRobin.Remove], and inspected with [RoundRobin.Items], [RoundRobin.Len],
+// and [RoundRobin.StatisticsOf].
 //
 // Selection order depends on the weights: while every item carries the default
 // weight, the cycle is strict rotation — items are served one after another in
@@ -21,6 +22,8 @@
 // selection switches to smooth weighted round-robin (the nginx algorithm): over
 // every window of sum(weights) selections each item is picked exactly weight
 // times, with its picks spread across the window instead of bunched into a run.
+// Once every item carries the default weight again, selection returns to strict
+// rotation.
 //
 // # Configuration
 //
