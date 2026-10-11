@@ -11,12 +11,20 @@ import (
 	hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
 )
 
+// weightedValue pairs a value with its selection weight for weighted test cases,
+// giving them a deterministic order instead of map iteration.
+type weightedValue struct {
+	value  string
+	weight int
+}
+
 func TestNew_ZeroItems(t *testing.T) {
 	t.Parallel()
 
 	rr, err := hqgoroundrobin.New[string](nil)
 
 	require.EqualError(t, err, "roundrobin.New: no items", "Expected the zero-items error to name its producing function")
+	require.ErrorIs(t, err, hqgoroundrobin.ErrNoItems, "Expected the zero-items error to match the ErrNoItems sentinel")
 	assert.Nil(t, rr, "Expected no round-robin instance on failure")
 }
 
@@ -82,17 +90,17 @@ func TestNext_WeightedDistribution(t *testing.T) {
 
 	cases := []struct {
 		name     string
-		weights  map[string]int
+		weights  []weightedValue
 		expected []string
 	}{
 		{
 			name:     "two to one to one",
-			weights:  map[string]int{"a": 2, "b": 1, "c": 1},
+			weights:  []weightedValue{{value: "a", weight: 2}, {value: "b", weight: 1}, {value: "c", weight: 1}},
 			expected: []string{"a", "b", "c", "a", "a", "b", "c", "a"},
 		},
 		{
-			name:     "three to one to two",
-			weights:  map[string]int{"a": 2, "b": 1, "c": 3},
+			name:     "two to one to three",
+			weights:  []weightedValue{{value: "a", weight: 2}, {value: "b", weight: 1}, {value: "c", weight: 3}},
 			expected: []string{"c", "a", "b", "c", "a", "c"},
 		},
 	}
@@ -104,16 +112,16 @@ func TestNext_WeightedDistribution(t *testing.T) {
 			rr, err := hqgoroundrobin.New([]string{"a", "b", "c"})
 			require.NoError(t, err, "Expected creating a round-robin to succeed")
 
-			for value, weight := range tc.weights {
-				rr.AddWithWeight(value, weight)
+			for _, wv := range tc.weights {
+				rr.AddWithWeight(wv.value, wv.weight)
 			}
 
 			counts := make(map[string]int)
 
 			totalWeight := 0
 
-			for _, weight := range tc.weights {
-				totalWeight += weight
+			for _, wv := range tc.weights {
+				totalWeight += wv.weight
 			}
 
 			for i, want := range tc.expected {
@@ -124,11 +132,76 @@ func TestNext_WeightedDistribution(t *testing.T) {
 				counts[got]++
 			}
 
-			for value, weight := range tc.weights {
-				assert.Equal(t, weight*len(tc.expected)/totalWeight, counts[value], "Expected item %q to be served in proportion to its weight", value)
+			for _, wv := range tc.weights {
+				assert.Equal(t, wv.weight*len(tc.expected)/totalWeight, counts[wv.value], "Expected item %q to be served in proportion to its weight", wv.value)
 			}
 		})
 	}
+}
+
+func TestNext_WeightedWithRotateAmount(t *testing.T) {
+	t.Parallel()
+
+	rr, err := hqgoroundrobin.New([]string{"a", "b", "c"}, hqgoroundrobin.WithRotateAmount(2))
+	require.NoError(t, err, "Expected creating a round-robin to succeed")
+
+	rr.AddWithWeight("a", 3)
+
+	served := make([]string, 0, 10)
+
+	for range 10 {
+		served = append(served, rr.Next())
+	}
+
+	assert.Equal(t, []string{"a", "a", "b", "b", "a", "a", "c", "c", "a", "a"}, served, "Expected each weighted pick to be served rotateAmount times in a row")
+}
+
+func TestAddWithWeight_NewValue(t *testing.T) {
+	t.Parallel()
+
+	rr, err := hqgoroundrobin.New([]string{"a", "b"})
+	require.NoError(t, err, "Expected creating a round-robin to succeed")
+
+	rr.AddWithWeight("c", 3)
+
+	assert.Equal(t, 3, rr.Len(), "Expected AddWithWeight to append a new value")
+
+	served := make([]string, 0, 10)
+
+	for range 10 {
+		served = append(served, rr.Next())
+	}
+
+	assert.Equal(t, []string{"c", "a", "c", "b", "c", "c", "a", "c", "b", "c"}, served, "Expected the new weighted value to shape a deterministic selection order")
+}
+
+func TestWeighted_RevertsToStrictRotation(t *testing.T) {
+	t.Parallel()
+
+	rr, err := hqgoroundrobin.New([]string{"a", "b", "c"})
+	require.NoError(t, err, "Expected creating a round-robin to succeed")
+
+	rr.AddWithWeight("a", 3)
+	rr.AddWithWeight("b", 2)
+
+	weighted := make([]string, 0, 5)
+
+	for range 5 {
+		weighted = append(weighted, rr.Next())
+	}
+
+	assert.Equal(t, []string{"a", "b", "a", "c", "b"}, weighted, "Expected smooth weighted round-robin while non-default weights are set")
+
+	rr.AddWithWeight("a", 1)
+	rr.AddWithWeight("b", 1)
+
+	served := make([]string, 0, 6)
+
+	for range 6 {
+		served = append(served, rr.Next())
+	}
+
+	assert.Equal(t, []string{"c", "a", "b", "c", "a", "b"}, served, "Expected strict rotation once every weight returns to the default")
 }
 
 func TestAddWithWeight_UpdatesExistingItem(t *testing.T) {
@@ -244,6 +317,53 @@ func TestRemove_DuringIteration(t *testing.T) {
 	})
 }
 
+func TestRemove_WeightedMode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("removing an item keeps weighted selection proportional", func(t *testing.T) {
+		t.Parallel()
+
+		rr, err := hqgoroundrobin.New([]string{"a", "b", "c"})
+		require.NoError(t, err, "Expected creating a round-robin to succeed")
+
+		rr.AddWithWeight("a", 2)
+
+		assert.Equal(t, "a", rr.Next(), "Expected the weighted first pick")
+
+		assert.True(t, rr.Remove("c"), "Expected removing a known value to report true")
+
+		served := make([]string, 0, 6)
+
+		for range 6 {
+			served = append(served, rr.Next())
+		}
+
+		assert.Equal(t, []string{"b", "a", "a", "b", "a", "a"}, served, "Expected weighted selection to stay proportional after the removal")
+	})
+
+	t.Run("removing the last non-default weight restores strict rotation", func(t *testing.T) {
+		t.Parallel()
+
+		rr, err := hqgoroundrobin.New([]string{"a", "b", "c"})
+		require.NoError(t, err, "Expected creating a round-robin to succeed")
+
+		rr.AddWithWeight("a", 3)
+
+		assert.Equal(t, "a", rr.Next(), "Expected the weighted first pick")
+		assert.Equal(t, "b", rr.Next(), "Expected the weighted second pick")
+
+		assert.True(t, rr.Remove("a"), "Expected removing a known value to report true")
+
+		served := make([]string, 0, 6)
+
+		for range 6 {
+			served = append(served, rr.Next())
+		}
+
+		assert.Equal(t, []string{"c", "b", "c", "b", "c", "b"}, served, "Expected strict rotation once the last non-default weight is removed")
+	})
+}
+
 func TestItems_CopyIsolation(t *testing.T) {
 	t.Parallel()
 
@@ -295,6 +415,35 @@ func TestStatistics(t *testing.T) {
 
 	require.True(t, found, "Expected statistics for an item in the cycle")
 	assert.Equal(t, int64(3), statsB.ServesCount(), "Expected serves to keep accumulating for live items")
+}
+
+func TestStatistics_ReaddedValueGetsFreshStatistics(t *testing.T) {
+	t.Parallel()
+
+	rr, err := hqgoroundrobin.New([]string{"a", "b"})
+	require.NoError(t, err, "Expected creating a round-robin to succeed")
+
+	assert.Equal(t, "a", rr.Next(), "Expected the first serve to be the first item")
+
+	old, found := rr.StatisticsOf("a")
+
+	require.True(t, found, "Expected statistics for an item in the cycle")
+	require.NotNil(t, old, "Expected statistics for an item in the cycle")
+	assert.Equal(t, int64(1), old.ServesCount(), "Expected the serve count of the served item")
+
+	assert.True(t, rr.Remove("a"), "Expected removing a known value to report true")
+
+	rr.Add("a")
+
+	assert.Equal(t, "b", rr.Next(), "Expected rotation to continue with the remaining item")
+	assert.Equal(t, "a", rr.Next(), "Expected the re-added value to rejoin the cycle")
+
+	fresh, found := rr.StatisticsOf("a")
+
+	require.True(t, found, "Expected statistics for an item in the cycle")
+	require.NotSame(t, old, fresh, "Expected the re-added value to get fresh statistics")
+	assert.Equal(t, int64(1), fresh.ServesCount(), "Expected the fresh statistics to start counting from zero")
+	assert.Equal(t, int64(1), old.ServesCount(), "Expected the old statistics of the removed item to stay frozen")
 }
 
 func TestConcurrentAccess(t *testing.T) {
