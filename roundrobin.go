@@ -35,6 +35,10 @@ type options struct {
 //
 // Parameters:
 //   - opts (*options): the options bag to mutate.
+//
+// Returns:
+//
+//	none.
 type OptionFunc func(opts *options)
 
 // WithRotateAmount configures how many times in a row one item is served before
@@ -151,6 +155,10 @@ func New[T comparable](items []T, ofs ...OptionFunc) (rr *RoundRobin[T], err err
 //
 // Parameters:
 //   - items (...T): the values to add.
+//
+// Returns:
+//
+//	none.
 func (r *RoundRobin[T]) Add(items ...T) {
 	r.mu.Lock()
 
@@ -184,6 +192,10 @@ func (r *RoundRobin[T]) Add(items ...T) {
 // Parameters:
 //   - value (T): the value to add.
 //   - weight (int): the relative selection weight of the item.
+//
+// Returns:
+//
+//	none.
 func (r *RoundRobin[T]) AddWithWeight(value T, weight int) {
 	if weight <= 0 {
 		weight = DefaultWeight
@@ -214,6 +226,14 @@ func (r *RoundRobin[T]) AddWithWeight(value T, weight int) {
 // updateWeighted recomputes the weighted flag from the current item weights, so
 // selection falls back to strict rotation once every item carries the default
 // weight again. The caller must hold [RoundRobin.mu].
+//
+// Parameters:
+//
+//	none.
+//
+// Returns:
+//
+//	none.
 func (r *RoundRobin[T]) updateWeighted() {
 	weighted := false
 
@@ -283,6 +303,10 @@ func (r *RoundRobin[T]) Remove(value T) (removed bool) {
 // Calling Next on an empty cycle — possible after every item was removed with
 // [RoundRobin.Remove] — returns the zero value of T.
 //
+// Parameters:
+//
+//	none.
+//
 // Returns:
 //   - value (T): the value of the served item, or the zero value of T when the
 //     cycle is empty.
@@ -312,6 +336,10 @@ func (r *RoundRobin[T]) Next() (value T) {
 // Items returns a snapshot copy of the values currently in the cycle, in cycle
 // order. Mutating the returned slice never affects the round-robin state.
 //
+// Parameters:
+//
+//	none.
+//
 // Returns:
 //   - items ([]T): the values in the cycle.
 func (r *RoundRobin[T]) Items() (items []T) {
@@ -329,6 +357,10 @@ func (r *RoundRobin[T]) Items() (items []T) {
 }
 
 // Len returns the number of items in the cycle.
+//
+// Parameters:
+//
+//	none.
 //
 // Returns:
 //   - n (int): the number of items.
@@ -370,6 +402,14 @@ func (r *RoundRobin[T]) StatisticsOf(value T) (statistics *Statistics, found boo
 // current weight, pick the heaviest, and subtract the total weight from the
 // pick — which selects each item exactly weight times per window of
 // totalWeight selections, spread evenly across the window.
+//
+// Parameters:
+//
+//	none.
+//
+// Returns:
+//
+//	none.
 func (r *RoundRobin[T]) advance() {
 	if !r.weighted {
 		r.current = (r.current + 1) % len(r.items)
