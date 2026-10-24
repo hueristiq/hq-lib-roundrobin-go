@@ -18,6 +18,10 @@ type Statistics struct {
 
 // ServesCount returns how many times the item has been served.
 //
+// Parameters:
+//
+//	none.
+//
 // Returns:
 //   - n (int64): the current serve count.
 func (s *Statistics) ServesCount() (n int64) {
@@ -27,12 +31,28 @@ func (s *Statistics) ServesCount() (n int64) {
 }
 
 // ResetServesCount atomically resets the serve count to zero.
+//
+// Parameters:
+//
+//	none.
+//
+// Returns:
+//
+//	none.
 func (s *Statistics) ResetServesCount() {
 	s.servesCount.Store(0)
 }
 
 // incrementServesCount atomically increments the serve count by one. It is called
 // by [RoundRobin.Next] for the served item.
+//
+// Parameters:
+//
+//	none.
+//
+// Returns:
+//
+//	none.
 func (s *Statistics) incrementServesCount() {
 	s.servesCount.Add(1)
 }
