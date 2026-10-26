@@ -19,11 +19,10 @@
 // Selection order depends on the weights: while every item carries the default
 // weight, the cycle is strict rotation — items are served one after another in
 // insertion order, wrapping around. As soon as an item carries a different weight,
-// selection switches to smooth weighted round-robin (the nginx algorithm): over
-// every window of sum(weights) selections each item is picked exactly weight
-// times, with its picks spread across the window instead of bunched into a run.
-// Once every item carries the default weight again, selection returns to strict
-// rotation.
+// selection switches to smooth weighted round-robin (the nginx algorithm): in the
+// steady state each item is picked in proportion to its weight, with its picks
+// spread across the cycle instead of bunched into a run. Once every item carries
+// the default weight again, selection returns to strict rotation.
 //
 // # Configuration
 //

@@ -23,7 +23,7 @@ func TestNew_ZeroItems(t *testing.T) {
 
 	rr, err := hqgoroundrobin.New[string](nil)
 
-	require.EqualError(t, err, "roundrobin.New: no items", "Expected the zero-items error to name its producing function")
+	require.EqualError(t, err, "no items", "Expected a plain sentinel message")
 	require.ErrorIs(t, err, hqgoroundrobin.ErrNoItems, "Expected the zero-items error to match the ErrNoItems sentinel")
 	assert.Nil(t, rr, "Expected no round-robin instance on failure")
 }
@@ -58,7 +58,7 @@ func TestNext_RotateAmount(t *testing.T) {
 
 	cases := []struct {
 		name         string
-		rotateAmount int32
+		rotateAmount int
 		expected     []string
 	}{
 		{name: "default", rotateAmount: hqgoroundrobin.DefaultRotateAmount, expected: []string{"a", "b", "c", "a", "b", "c"}},

@@ -2,7 +2,7 @@
 
 ![made with go](https://img.shields.io/badge/made%20with-Go-1E90FF.svg) [![go reference](https://pkg.go.dev/badge/github.com/hueristiq/hq-lib-roundrobin-go.svg)](https://pkg.go.dev/github.com/hueristiq/hq-lib-roundrobin-go) [![license](https://img.shields.io/badge/license-MIT-gray.svg?color=1E90FF)](https://github.com/hueristiq/hq-lib-roundrobin-go/blob/main/LICENSE) ![maintenance](https://img.shields.io/badge/maintained%3F-yes-1E90FF.svg) [![open issues](https://img.shields.io/github/issues-raw/hueristiq/hq-lib-roundrobin-go.svg?style=flat&color=1E90FF)](https://github.com/hueristiq/hq-lib-roundrobin-go/issues?q=is:issue+is:open) [![closed issues](https://img.shields.io/github/issues-closed-raw/hueristiq/hq-lib-roundrobin-go.svg?style=flat&color=1E90FF)](https://github.com/hueristiq/hq-lib-roundrobin-go/issues?q=is:issue+is:closed) [![contribution](https://img.shields.io/badge/contributions-welcome-1E90FF.svg)](https://github.com/hueristiq/hq-lib-roundrobin-go/blob/main/CONTRIBUTING.md)
 
-`hq-lib-roundrobin-go` is a [Go](https://golang.org/) package providing a generic, concurrency-safe [round-robin](https://en.wikipedia.org/wiki/Round-robin_scheduling) selector: it cycles through a set of items, handing out one per call, optionally serving some items more often than others through weights.
+`hq-lib-roundrobin-go` is a [Go](https://golang.org/) package providing a generic, concurrency-safe [round-robin](https://en.wikipedia.org/wiki/Round-robin_scheduling) selector.
 
 ## Resources
 
@@ -31,8 +31,10 @@
 To install `hq-lib-roundrobin-go`, run the following command in your Go project:
 
 ```bash
-go get -v -u github.com/hueristiq/hq-lib-roundrobin-go
+go get github.com/hueristiq/hq-lib-roundrobin-go@latest
 ```
+
+Requires Go 1.26.3 or later.
 
 ## Usage
 
@@ -41,6 +43,8 @@ The examples below import the package under the `hqgoroundrobin` alias.
 ```go
 import hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
 ```
+
+The snippets below are illustrative.
 
 ### Basic Rotation
 
@@ -110,7 +114,7 @@ func main() {
 
 ### Weighted Selection
 
-Use `AddWithWeight` to make some items be served more often. Once any item carries a non-default weight, selection switches to smooth weighted round-robin: over every window of `sum(weights)` selections each item is picked exactly `weight` times, spread across the window. When every item again carries the default weight — weights reset to `1`, or the weighted items removed — selection returns to strict rotation in insertion order. Adding a weight of `3` to one of two items:
+Use `AddWithWeight` to make some items be served more often. Once any item carries a non-default weight, selection switches to smooth weighted round-robin: in the steady state each item is picked in proportion to its `weight`, with picks spread across the cycle. When every item again carries the default weight — weights reset to `1`, or the weighted items removed — selection returns to strict rotation in insertion order. Adding a weight of `3` to one of two items:
 
 ```go
 package main
@@ -191,7 +195,7 @@ func main() {
 
 ## Configuration
 
-Behavior is set through functional options passed to `New`. Any option left unset falls back to its default.
+Behavior is set through functional options passed to `New`. Any option left unset falls back to its default. The `With*` helpers cover the common cases; because the option receives the exported `Options` type, callers can also write custom `OptionFunc`s.
 
 | Option | Description | Default |
 | --- | --- | --- |
