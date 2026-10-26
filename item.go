@@ -7,11 +7,11 @@ package roundrobin
 // removal.
 //
 // Fields:
-//   - value (T): the value handed back by [RoundRobin.Next].
-//   - weight (int): the relative selection weight; always at least 1.
-//   - currentWeight (int64): the smooth weighted round-robin state, mutated on
+//   - value (T): value handed back by [RoundRobin.Next].
+//   - weight (int): relative selection weight; always at least 1.
+//   - currentWeight (int64): smooth weighted round-robin state, mutated on
 //     every weighted selection while holding [RoundRobin.mu].
-//   - statistics (Statistics): the per-item usage metrics, updated atomically.
+//   - statistics (Statistics): per-item usage metrics, updated atomically.
 type item[T comparable] struct {
 	value         T
 	weight        int
