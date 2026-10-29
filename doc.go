@@ -9,12 +9,14 @@
 //
 // # Entry points
 //
-// [New] builds a [RoundRobin] over an initial set of items; at least one item is
-// required, or [New] fails with [ErrNoItems]. [RoundRobin.Next] hands out the
-// next item, following the selection policy described below. Items can be added
-// with [RoundRobin.Add] and [RoundRobin.AddWithWeight], removed with
-// [RoundRobin.Remove], and inspected with [RoundRobin.Items], [RoundRobin.Len],
-// and [RoundRobin.StatisticsOf].
+// [New] builds a [RoundRobin] over an initial set of items, cycling through them
+// in order; [NewWeighted] builds one with per-item selection weights. Both accept
+// an empty initial set — items can be added later with [RoundRobin.Add] and
+// [RoundRobin.AddWithWeight]. [RoundRobin.Next] hands out the next item,
+// following the selection policy described below, and [RoundRobin.NextOK] does
+// the same while reporting whether a serve was possible. Items can be removed
+// with [RoundRobin.Remove], and inspected with [RoundRobin.Items],
+// [RoundRobin.Len], and [RoundRobin.StatisticsOf].
 //
 // Selection order depends on the weights: while every item carries the default
 // weight, the cycle is strict rotation — items are served one after another in
@@ -26,10 +28,11 @@
 //
 // # Configuration
 //
-// Behavior is set through functional options passed to [New]: [WithRotateAmount]
-// controls how many times in a row one item is served before the selection
-// advances to the next item. Unset, or set to a non-positive value, it falls back
-// to [DefaultRotateAmount].
+// The rotate amount — how many times in a row one item is served before the
+// selection advances to the next item — is set with
+// [RoundRobin.SetRotateAmount]; unset, it falls back to [DefaultRotateAmount].
+// Weights are per-item, set through [RoundRobin.AddWithWeight] and [NewWeighted];
+// a non-positive weight falls back to [DefaultWeight].
 //
 // # Concurrency
 //

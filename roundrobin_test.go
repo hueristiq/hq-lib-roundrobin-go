@@ -2,6 +2,7 @@ package roundrobin_test
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -18,22 +19,27 @@ type weightedValue struct {
 	weight int
 }
 
-func TestNew_ZeroItems(t *testing.T) {
+func TestNew_EmptyCycle(t *testing.T) {
 	t.Parallel()
 
-	rr, err := hqgoroundrobin.New[string](nil)
+	rr := hqgoroundrobin.New[string]()
 
-	require.EqualError(t, err, "no items", "Expected a plain sentinel message")
-	require.ErrorIs(t, err, hqgoroundrobin.ErrNoItems, "Expected the zero-items error to match the ErrNoItems sentinel")
-	assert.Nil(t, rr, "Expected no round-robin instance on failure")
+	require.NotNil(t, rr, "Expected an empty call to build a round-robin instance")
+	assert.Equal(t, 0, rr.Len(), "Expected an empty call to build an empty cycle")
+	assert.Empty(t, rr.Items(), "Expected an empty cycle to list no items")
+	assert.Empty(t, rr.Next(), "Expected Next on an empty cycle to return the zero value")
+
+	value, ok := rr.NextOK()
+
+	assert.Empty(t, value, "Expected NextOK on an empty cycle to return the zero value")
+	assert.False(t, ok, "Expected NextOK to report that no serve was possible")
 }
 
 func TestNew_CollapsesDuplicates(t *testing.T) {
 	t.Parallel()
 
-	rr, err := hqgoroundrobin.New([]string{"a", "b", "a", "c", "b"})
+	rr := hqgoroundrobin.New("a", "b", "a", "c", "b")
 
-	require.NoError(t, err, "Expected creating a round-robin with duplicates to succeed")
 	assert.Equal(t, 3, rr.Len(), "Expected duplicate values to be collapsed")
 	assert.Equal(t, []string{"a", "b", "c"}, rr.Items(), "Expected the first occurrence order to be kept")
 }
@@ -41,8 +47,7 @@ func TestNew_CollapsesDuplicates(t *testing.T) {
 func TestNext_RotationOrder(t *testing.T) {
 	t.Parallel()
 
-	rr, err := hqgoroundrobin.New([]string{"a", "b", "c"})
-	require.NoError(t, err, "Expected creating a round-robin to succeed")
+	rr := hqgoroundrobin.New("a", "b", "c")
 
 	served := make([]string, 0, 6)
 
@@ -51,6 +56,22 @@ func TestNext_RotationOrder(t *testing.T) {
 	}
 
 	assert.Equal(t, []string{"a", "b", "c", "a", "b", "c"}, served, "Expected strict rotation in insertion order")
+}
+
+func TestNextOK_RotationOrder(t *testing.T) {
+	t.Parallel()
+
+	rr := hqgoroundrobin.New("a", "b")
+
+	value, ok := rr.NextOK()
+
+	assert.Equal(t, "a", value, "Expected the first serve to be the first item")
+	assert.True(t, ok, "Expected a serve on a non-empty cycle")
+
+	value, ok = rr.NextOK()
+
+	assert.Equal(t, "b", value, "Expected the second serve to be the second item")
+	assert.True(t, ok, "Expected a serve on a non-empty cycle")
 }
 
 func TestNext_RotateAmount(t *testing.T) {
@@ -71,8 +92,9 @@ func TestNext_RotateAmount(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			rr, err := hqgoroundrobin.New([]string{"a", "b", "c"}, hqgoroundrobin.WithRotateAmount(tc.rotateAmount))
-			require.NoError(t, err, "Expected creating a round-robin to succeed")
+			rr := hqgoroundrobin.New("a", "b", "c")
+
+			rr.SetRotateAmount(tc.rotateAmount)
 
 			served := make([]string, 0, len(tc.expected))
 
@@ -83,6 +105,58 @@ func TestNext_RotateAmount(t *testing.T) {
 			assert.Equal(t, tc.expected, served, "Expected each item to be served rotateAmount times before advancing")
 		})
 	}
+}
+
+func TestNewWeighted_Distribution(t *testing.T) {
+	t.Parallel()
+
+	rr := hqgoroundrobin.NewWeighted(map[string]int{
+		"a": 2,
+		"b": 1,
+		"c": 1,
+	})
+
+	counts := make(map[string]int)
+
+	for range 8 {
+		counts[rr.Next()]++
+	}
+
+	assert.Equal(t, 4, counts["a"], "Expected item %q to be served in proportion to its weight", "a")
+	assert.Equal(t, 2, counts["b"], "Expected item %q to be served in proportion to its weight", "b")
+	assert.Equal(t, 2, counts["c"], "Expected item %q to be served in proportion to its weight", "c")
+}
+
+func TestNewWeighted_NonPositiveWeightsFallBackToDefault(t *testing.T) {
+	t.Parallel()
+
+	rr := hqgoroundrobin.NewWeighted(map[string]int{
+		"a": 0,
+		"b": -3,
+		"c": 1,
+	})
+
+	counts := make(map[string]int)
+
+	for range 6 {
+		counts[rr.Next()]++
+	}
+
+	for _, value := range []string{"a", "b", "c"} {
+		assert.Equal(t, 2, counts[value], "Expected item %q to be served an equal share under strict rotation", value)
+	}
+}
+
+func TestNewWeighted_EmptyMap(t *testing.T) {
+	t.Parallel()
+
+	rr := hqgoroundrobin.NewWeighted(map[string]int{})
+
+	assert.Equal(t, 0, rr.Len(), "Expected an empty map to build an empty cycle")
+
+	_, ok := rr.NextOK()
+
+	assert.False(t, ok, "Expected NextOK to report that no serve was possible")
 }
 
 func TestNext_WeightedDistribution(t *testing.T) {
@@ -109,8 +183,7 @@ func TestNext_WeightedDistribution(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			rr, err := hqgoroundrobin.New([]string{"a", "b", "c"})
-			require.NoError(t, err, "Expected creating a round-robin to succeed")
+			rr := hqgoroundrobin.New("a", "b", "c")
 
 			for _, wv := range tc.weights {
 				rr.AddWithWeight(wv.value, wv.weight)
@@ -142,9 +215,9 @@ func TestNext_WeightedDistribution(t *testing.T) {
 func TestNext_WeightedWithRotateAmount(t *testing.T) {
 	t.Parallel()
 
-	rr, err := hqgoroundrobin.New([]string{"a", "b", "c"}, hqgoroundrobin.WithRotateAmount(2))
-	require.NoError(t, err, "Expected creating a round-robin to succeed")
+	rr := hqgoroundrobin.New("a", "b", "c")
 
+	rr.SetRotateAmount(2)
 	rr.AddWithWeight("a", 3)
 
 	served := make([]string, 0, 10)
@@ -159,8 +232,7 @@ func TestNext_WeightedWithRotateAmount(t *testing.T) {
 func TestAddWithWeight_NewValue(t *testing.T) {
 	t.Parallel()
 
-	rr, err := hqgoroundrobin.New([]string{"a", "b"})
-	require.NoError(t, err, "Expected creating a round-robin to succeed")
+	rr := hqgoroundrobin.New("a", "b")
 
 	rr.AddWithWeight("c", 3)
 
@@ -178,8 +250,7 @@ func TestAddWithWeight_NewValue(t *testing.T) {
 func TestWeighted_RevertsToStrictRotation(t *testing.T) {
 	t.Parallel()
 
-	rr, err := hqgoroundrobin.New([]string{"a", "b", "c"})
-	require.NoError(t, err, "Expected creating a round-robin to succeed")
+	rr := hqgoroundrobin.New("a", "b", "c")
 
 	rr.AddWithWeight("a", 3)
 	rr.AddWithWeight("b", 2)
@@ -207,8 +278,7 @@ func TestWeighted_RevertsToStrictRotation(t *testing.T) {
 func TestAddWithWeight_UpdatesExistingItem(t *testing.T) {
 	t.Parallel()
 
-	rr, err := hqgoroundrobin.New([]string{"a", "b"})
-	require.NoError(t, err, "Expected creating a round-robin to succeed")
+	rr := hqgoroundrobin.New("a", "b")
 
 	rr.AddWithWeight("a", 3)
 
@@ -226,8 +296,7 @@ func TestAddWithWeight_UpdatesExistingItem(t *testing.T) {
 func TestAddWithWeight_NormalizesNonPositiveWeight(t *testing.T) {
 	t.Parallel()
 
-	rr, err := hqgoroundrobin.New([]string{"a", "b"})
-	require.NoError(t, err, "Expected creating a round-robin to succeed")
+	rr := hqgoroundrobin.New("a", "b")
 
 	rr.AddWithWeight("c", 0)
 	rr.AddWithWeight("d", -3)
@@ -244,8 +313,7 @@ func TestAddWithWeight_NormalizesNonPositiveWeight(t *testing.T) {
 func TestAdd_DuringIteration(t *testing.T) {
 	t.Parallel()
 
-	rr, err := hqgoroundrobin.New([]string{"a", "b"})
-	require.NoError(t, err, "Expected creating a round-robin to succeed")
+	rr := hqgoroundrobin.New("a", "b")
 
 	assert.Equal(t, "a", rr.Next(), "Expected the first serve to be the first item")
 
@@ -268,8 +336,7 @@ func TestRemove_DuringIteration(t *testing.T) {
 	t.Run("removing the served item starts its successor fresh", func(t *testing.T) {
 		t.Parallel()
 
-		rr, err := hqgoroundrobin.New([]string{"a", "b", "c"})
-		require.NoError(t, err, "Expected creating a round-robin to succeed")
+		rr := hqgoroundrobin.New("a", "b", "c")
 
 		assert.Equal(t, "a", rr.Next(), "Expected the first serve to be the first item")
 		assert.True(t, rr.Remove("a"), "Expected removing a known value to report true")
@@ -287,8 +354,9 @@ func TestRemove_DuringIteration(t *testing.T) {
 	t.Run("removing ahead of the served item preserves the active run", func(t *testing.T) {
 		t.Parallel()
 
-		rr, err := hqgoroundrobin.New([]string{"a", "b", "c"}, hqgoroundrobin.WithRotateAmount(2))
-		require.NoError(t, err, "Expected creating a round-robin to succeed")
+		rr := hqgoroundrobin.New("a", "b", "c")
+
+		rr.SetRotateAmount(2)
 
 		assert.Equal(t, "a", rr.Next(), "Expected the first serve to be the first item")
 		assert.Equal(t, "a", rr.Next(), "Expected the rotate amount to hold the item")
@@ -307,8 +375,7 @@ func TestRemove_DuringIteration(t *testing.T) {
 	t.Run("removing every item empties the cycle", func(t *testing.T) {
 		t.Parallel()
 
-		rr, err := hqgoroundrobin.New([]string{"a"})
-		require.NoError(t, err, "Expected creating a round-robin to succeed")
+		rr := hqgoroundrobin.New("a")
 
 		assert.True(t, rr.Remove("a"), "Expected removing a known value to report true")
 		assert.Equal(t, 0, rr.Len(), "Expected the cycle to be empty")
@@ -323,8 +390,7 @@ func TestRemove_WeightedMode(t *testing.T) {
 	t.Run("removing an item keeps weighted selection proportional", func(t *testing.T) {
 		t.Parallel()
 
-		rr, err := hqgoroundrobin.New([]string{"a", "b", "c"})
-		require.NoError(t, err, "Expected creating a round-robin to succeed")
+		rr := hqgoroundrobin.New("a", "b", "c")
 
 		rr.AddWithWeight("a", 2)
 
@@ -344,8 +410,7 @@ func TestRemove_WeightedMode(t *testing.T) {
 	t.Run("removing the last non-default weight restores strict rotation", func(t *testing.T) {
 		t.Parallel()
 
-		rr, err := hqgoroundrobin.New([]string{"a", "b", "c"})
-		require.NoError(t, err, "Expected creating a round-robin to succeed")
+		rr := hqgoroundrobin.New("a", "b", "c")
 
 		rr.AddWithWeight("a", 3)
 
@@ -367,8 +432,7 @@ func TestRemove_WeightedMode(t *testing.T) {
 func TestItems_CopyIsolation(t *testing.T) {
 	t.Parallel()
 
-	rr, err := hqgoroundrobin.New([]string{"a", "b", "c"})
-	require.NoError(t, err, "Expected creating a round-robin to succeed")
+	rr := hqgoroundrobin.New("a", "b", "c")
 
 	items := rr.Items()
 
@@ -384,8 +448,7 @@ func TestItems_CopyIsolation(t *testing.T) {
 func TestStatistics(t *testing.T) {
 	t.Parallel()
 
-	rr, err := hqgoroundrobin.New([]string{"a", "b", "c"})
-	require.NoError(t, err, "Expected creating a round-robin to succeed")
+	rr := hqgoroundrobin.New("a", "b", "c")
 
 	for range 7 {
 		rr.Next()
@@ -420,8 +483,7 @@ func TestStatistics(t *testing.T) {
 func TestStatistics_ReaddedValueGetsFreshStatistics(t *testing.T) {
 	t.Parallel()
 
-	rr, err := hqgoroundrobin.New([]string{"a", "b"})
-	require.NoError(t, err, "Expected creating a round-robin to succeed")
+	rr := hqgoroundrobin.New("a", "b")
 
 	assert.Equal(t, "a", rr.Next(), "Expected the first serve to be the first item")
 
@@ -452,8 +514,7 @@ func TestConcurrentAccess(t *testing.T) {
 	t.Run("deterministic equal distribution", func(t *testing.T) {
 		t.Parallel()
 
-		rr, err := hqgoroundrobin.New([]string{"a", "b", "c", "d"})
-		require.NoError(t, err, "Expected creating a round-robin to succeed")
+		rr := hqgoroundrobin.New("a", "b", "c", "d")
 
 		var wg sync.WaitGroup
 
@@ -488,8 +549,7 @@ func TestConcurrentAccess(t *testing.T) {
 	t.Run("mixed operations under race detector", func(t *testing.T) {
 		t.Parallel()
 
-		rr, err := hqgoroundrobin.New([]string{"server-0", "server-1", "server-2", "server-3"})
-		require.NoError(t, err, "Expected creating a round-robin to succeed")
+		rr := hqgoroundrobin.New("server-0", "server-1", "server-2", "server-3")
 
 		var wg sync.WaitGroup
 
@@ -524,5 +584,86 @@ func TestConcurrentAccess(t *testing.T) {
 		wg.Wait()
 
 		assert.GreaterOrEqual(t, rr.Len(), 0, "Expected the cycle to stay consistent after mixed concurrent access")
+	})
+}
+
+// ExampleNew demonstrates strict rotation over a fixed set of items.
+func ExampleNew() {
+	rr := hqgoroundrobin.New("server-1", "server-2", "server-3")
+
+	for range 6 {
+		fmt.Println(rr.Next())
+	}
+	// Output:
+	// server-1
+	// server-2
+	// server-3
+	// server-1
+	// server-2
+	// server-3
+}
+
+// ExampleRoundRobin_AddWithWeight demonstrates smooth weighted round-robin selection.
+func ExampleRoundRobin_AddWithWeight() {
+	rr := hqgoroundrobin.New("fast", "slow")
+
+	rr.AddWithWeight("fast", 3)
+
+	for range 8 {
+		fmt.Println(rr.Next())
+	}
+	// Output:
+	// fast
+	// fast
+	// slow
+	// fast
+	// fast
+	// fast
+	// slow
+	// fast
+}
+
+// ExampleRoundRobin_NextOK demonstrates explicit handling of an empty cycle.
+func ExampleRoundRobin_NextOK() {
+	rr := hqgoroundrobin.New[string]()
+
+	if value, ok := rr.NextOK(); ok {
+		fmt.Println(value)
+
+		return
+	}
+
+	fmt.Println("cycle is empty")
+	// Output: cycle is empty
+}
+
+// FuzzAddRemoveNext exercises construction, serving, and removal over arbitrary
+// value lists: the cycle must never panic, duplicate values must collapse, and
+// removing every value must always empty the cycle.
+func FuzzAddRemoveNext(f *testing.F) {
+	f.Add("a b c")
+	f.Add("a")
+	f.Add("")
+
+	f.Fuzz(func(t *testing.T, items string) {
+		values := strings.Fields(items)
+
+		rr := hqgoroundrobin.New(values...)
+
+		for range rr.Len() * 2 {
+			_, _ = rr.NextOK()
+		}
+
+		for _, value := range values {
+			_ = rr.Remove(value)
+		}
+
+		if rr.Len() != 0 {
+			t.Fatalf("Expected removing every value to empty the cycle, got %d items", rr.Len())
+		}
+
+		if _, ok := rr.NextOK(); ok {
+			t.Fatal("Expected NextOK to report an empty cycle")
+		}
 	})
 }
