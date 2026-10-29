@@ -1,27 +1,9 @@
 package roundrobin
 
 import (
-	"errors"
 	"slices"
 	"sync"
 )
-
-// Options configures a [RoundRobin] and is populated through [OptionFunc]
-// values passed to [New].
-//
-// Fields:
-//   - RotateAmount (int): consecutive serves per item before advancing.
-type Options struct {
-	RotateAmount int
-}
-
-// OptionFunc configures a [RoundRobin] through the functional-options idiom.
-// A nil OptionFunc is ignored. The With* helpers cover common settings, and
-// callers may write custom options because [Options] is exported.
-//
-// Parameters:
-//   - opts (*Options): the options to modify.
-type OptionFunc func(opts *Options)
 
 // RoundRobin is a concurrency-safe round-robin selector over a set of items of
 // type T: every call to [RoundRobin.Next] serves one item, cycling through the
@@ -39,8 +21,8 @@ type OptionFunc func(opts *Options)
 // Removing items perturbs the order of the very next picks, but the long-run
 // distribution stays proportional to the weights.
 //
-// The zero value is not usable; construct through [New]. A RoundRobin must not be
-// copied after first use.
+// The zero value is not usable; construct through [New] or [NewWeighted]. A
+// RoundRobin must not be copied after first use.
 //
 // Type Parameters:
 //   - T: the type of the items in the cycle; must be comparable.
@@ -79,6 +61,15 @@ func (r *RoundRobin[T]) Add(items ...T) {
 
 	defer r.mu.Unlock()
 
+	r.addLocked(items...)
+}
+
+// addLocked appends items to the cycle with [DefaultWeight], skipping values
+// already in the cycle. The caller must hold [RoundRobin.mu].
+//
+// Parameters:
+//   - items (...T): the values to add.
+func (r *RoundRobin[T]) addLocked(items ...T) {
 	for _, value := range items {
 		if _, exists := r.index[value]; exists {
 			continue
@@ -108,13 +99,24 @@ func (r *RoundRobin[T]) Add(items ...T) {
 //   - value (T): the value to add.
 //   - weight (int): the relative selection weight of the item.
 func (r *RoundRobin[T]) AddWithWeight(value T, weight int) {
-	if weight <= 0 {
-		weight = DefaultWeight
-	}
-
 	r.mu.Lock()
 
 	defer r.mu.Unlock()
+
+	r.addWithWeightLocked(value, weight)
+}
+
+// addWithWeightLocked adds value with weight to the cycle, updating the weight
+// of a value already in the cycle and recomputing the weighted flag. The caller
+// must hold [RoundRobin.mu].
+//
+// Parameters:
+//   - value (T): the value to add.
+//   - weight (int): the relative selection weight of the item.
+func (r *RoundRobin[T]) addWithWeightLocked(value T, weight int) {
+	if weight <= 0 {
+		weight = DefaultWeight
+	}
 
 	if it, exists := r.index[value]; exists {
 		r.totalWeight += int64(weight - it.weight)
@@ -132,6 +134,24 @@ func (r *RoundRobin[T]) AddWithWeight(value T, weight int) {
 	}
 
 	r.updateWeighted()
+}
+
+// SetRotateAmount sets how many times in a row one item is served before the
+// selection advances to the next item. A non-positive value falls back to
+// [DefaultRotateAmount].
+//
+// Parameters:
+//   - rotateAmount (int): the number of consecutive serves per item.
+func (r *RoundRobin[T]) SetRotateAmount(rotateAmount int) {
+	if rotateAmount <= 0 {
+		rotateAmount = DefaultRotateAmount
+	}
+
+	r.mu.Lock()
+
+	defer r.mu.Unlock()
+
+	r.rotateAmount = rotateAmount
 }
 
 // updateWeighted recomputes the weighted flag from the current item weights, so
@@ -204,18 +224,33 @@ func (r *RoundRobin[T]) Remove(value T) (removed bool) {
 // incremented.
 //
 // Calling Next on an empty cycle — possible after every item was removed with
-// [RoundRobin.Remove] — returns the zero value of T.
+// [RoundRobin.Remove], or when the cycle was created empty — returns the zero
+// value of T. Use [RoundRobin.NextOK] to distinguish an empty cycle from a
+// served zero value.
 //
 // Returns:
 //   - value (T): the value of the served item, or the zero value of T when the
 //     cycle is empty.
 func (r *RoundRobin[T]) Next() (value T) {
+	value, _ = r.NextOK()
+
+	return value
+}
+
+// NextOK serves the next item in the cycle like [RoundRobin.Next], additionally
+// reporting whether a serve was possible.
+//
+// Returns:
+//   - value (T): the value of the served item, or the zero value of T when the
+//     cycle is empty.
+//   - ok (bool): true when an item was served.
+func (r *RoundRobin[T]) NextOK() (value T, ok bool) {
 	r.mu.Lock()
 
 	defer r.mu.Unlock()
 
 	if len(r.items) == 0 {
-		return value
+		return value, false
 	}
 
 	if r.serves == 0 || r.serves >= r.rotateAmount {
@@ -229,7 +264,7 @@ func (r *RoundRobin[T]) Next() (value T) {
 	it := r.items[r.current]
 	it.statistics.incrementServesCount()
 
-	return it.value
+	return it.value, true
 }
 
 // Items returns a snapshot copy of the values currently in the cycle, in cycle
@@ -301,12 +336,14 @@ func (r *RoundRobin[T]) advance() {
 	}
 
 	best := 0
+	bestWeight := r.items[0].currentWeight
 
 	for i, it := range r.items {
 		it.currentWeight += int64(it.weight)
 
-		if it.currentWeight > r.items[best].currentWeight {
+		if it.currentWeight > bestWeight {
 			best = i
+			bestWeight = it.currentWeight
 		}
 	}
 
@@ -318,78 +355,69 @@ func (r *RoundRobin[T]) advance() {
 // DefaultRotateAmount is the default number of consecutive serves of one item
 // before the selection advances to the next item.
 //
-// It applies when [WithRotateAmount] is not supplied, and when a supplied value
+// It applies when [RoundRobin.SetRotateAmount] is not called, and when a value
 // less than or equal to 0 is normalized back to the default.
 const DefaultRotateAmount int = 1
 
-// DefaultWeight is the selection weight of items added through [RoundRobin.Add],
-// and the value non-positive weights passed to [RoundRobin.AddWithWeight] are
-// normalized to.
+// DefaultWeight is the selection weight of items added through [RoundRobin.Add]
+// and [New], and the value non-positive weights passed to
+// [RoundRobin.AddWithWeight] and [NewWeighted] are normalized to.
 const DefaultWeight = 1
 
-// ErrNoItems is returned by [New] when no items are provided.
-var ErrNoItems = errors.New("no items")
-
-// New creates a [RoundRobin] over the given items, configured by ofs.
+// New creates a [RoundRobin] cycling through the given items in order.
 //
-// Duplicate values are collapsed, keeping the first occurrence. At least one
-// item must be provided. Options are applied and then normalized: a non-positive
-// rotate amount falls back to [DefaultRotateAmount].
+// Duplicate values are collapsed, keeping the first occurrence. An empty call
+// creates an empty cycle: items can be added later with [RoundRobin.Add], and
+// [RoundRobin.NextOK] reports whether a serve was possible.
 //
 // Type Parameters:
 //   - T: the type of the items in the cycle; must be comparable.
 //
 // Parameters:
-//   - items ([]T): the initial values of the cycle.
-//   - ofs (...OptionFunc): functional options configuring the cycle.
+//   - items (...T): the initial values of the cycle, in cycle order.
 //
 // Returns:
 //   - rr (*RoundRobin[T]): the new round-robin instance.
-//   - err (error): [ErrNoItems] when items is empty.
-func New[T comparable](items []T, ofs ...OptionFunc) (rr *RoundRobin[T], err error) {
-	if len(items) == 0 {
-		return nil, ErrNoItems
-	}
-
-	opts := &Options{
-		RotateAmount: DefaultRotateAmount,
-	}
-
-	for _, of := range ofs {
-		if of != nil {
-			of(opts)
-		}
-	}
-
-	if opts.RotateAmount <= 0 {
-		opts.RotateAmount = DefaultRotateAmount
-	}
-
+func New[T comparable](items ...T) (rr *RoundRobin[T]) {
 	rr = &RoundRobin[T]{
 		items:        make([]*item[T], 0, len(items)),
 		index:        make(map[T]*item[T], len(items)),
 		current:      -1,
-		rotateAmount: opts.RotateAmount,
+		rotateAmount: DefaultRotateAmount,
 	}
 
-	rr.Add(items...)
+	rr.addLocked(items...)
 
-	return rr, nil
+	return rr
 }
 
-// WithRotateAmount configures how many times in a row one item is served before
-// the selection advances to the next item.
+// NewWeighted creates a [RoundRobin] with per-item selection weights drawn from
+// weights. While any item carries a non-default weight, selection runs smooth
+// weighted round-robin (see [RoundRobin]). A non-positive weight falls back to
+// [DefaultWeight]. An empty map creates an empty cycle.
+//
+// Map iteration order is undefined; call [RoundRobin.Add] first when a
+// deterministic initial cycle order matters.
+//
+// Type Parameters:
+//   - T: the type of the items in the cycle; must be comparable.
 //
 // Parameters:
-//   - rotateAmount (int): the number of consecutive serves per item. Values
-//     less than or equal to 0 fall back to [DefaultRotateAmount].
+//   - weights (map[T]int): the initial values and their selection weights.
 //
 // Returns:
-//   - fn (OptionFunc): the option applying rotateAmount.
-func WithRotateAmount(rotateAmount int) (fn OptionFunc) {
-	fn = func(opts *Options) {
-		opts.RotateAmount = rotateAmount
+//   - rr (*RoundRobin[T]): the new round-robin instance.
+func NewWeighted[T comparable](weights map[T]int) (rr *RoundRobin[T]) {
+	rr = &RoundRobin[T]{
+		items:        make([]*item[T], 0, len(weights)),
+		index:        make(map[T]*item[T], len(weights)),
+		current:      -1,
+		rotateAmount: DefaultRotateAmount,
 	}
 
-	return
+	for value, weight := range weights {
+		rr.addWithWeightLocked(value, weight)
+	}
+
+	return rr
 }

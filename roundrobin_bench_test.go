@@ -12,10 +12,10 @@ import (
 var nextSink string
 
 // newStringRoundRobin builds a round-robin of n distinct values named after
-// their index, failing the benchmark when construction fails.
+// their index.
 //
 // Parameters:
-//   - b (*testing.B): the benchmark to fail on error.
+//   - b (*testing.B): the benchmark, used to report setup failures.
 //   - n (int): the number of items in the cycle.
 //
 // Returns:
@@ -29,10 +29,7 @@ func newStringRoundRobin(b *testing.B, n int) (rr *hqgoroundrobin.RoundRobin[str
 		items = append(items, "server-"+strconv.Itoa(i))
 	}
 
-	rr, err := hqgoroundrobin.New(items)
-	if err != nil {
-		b.Fatalf("creating round-robin: %v", err)
-	}
+	rr = hqgoroundrobin.New(items...)
 
 	return
 }
@@ -62,7 +59,7 @@ func BenchmarkRoundRobinNext(b *testing.B) {
 
 			var next string
 
-			for b.Loop() {
+			for range b.N {
 				next = rr.Next()
 			}
 
