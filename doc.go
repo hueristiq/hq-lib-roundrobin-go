@@ -1,6 +1,6 @@
-// Package roundrobin provides a generic, concurrency-safe round-robin selector:
-// it cycles through a set of items, handing out one per call, optionally serving
-// some items more often than others through weights.
+// Package roundrobin selects items in a generic, concurrency-safe round-robin
+// rotation: it cycles through a set of items, handing out one per call,
+// optionally serving some items more often than others through weights.
 //
 // It suits work that spreads load across a fixed or slowly changing set of
 // candidates — upstream servers in a load balancer, worker queues, API endpoints,

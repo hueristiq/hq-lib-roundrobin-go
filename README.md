@@ -2,7 +2,7 @@
 
 ![made with go](https://img.shields.io/badge/made%20with-Go-1E90FF.svg) [![go reference](https://pkg.go.dev/badge/github.com/hueristiq/hq-lib-roundrobin-go.svg)](https://pkg.go.dev/github.com/hueristiq/hq-lib-roundrobin-go) [![license](https://img.shields.io/badge/license-MIT-gray.svg?color=1E90FF)](https://github.com/hueristiq/hq-lib-roundrobin-go/blob/main/LICENSE) ![maintenance](https://img.shields.io/badge/maintained%3F-yes-1E90FF.svg) [![open issues](https://img.shields.io/github/issues-raw/hueristiq/hq-lib-roundrobin-go.svg?style=flat&color=1E90FF)](https://github.com/hueristiq/hq-lib-roundrobin-go/issues?q=is:issue+is:open) [![closed issues](https://img.shields.io/github/issues-closed-raw/hueristiq/hq-lib-roundrobin-go.svg?style=flat&color=1E90FF)](https://github.com/hueristiq/hq-lib-roundrobin-go/issues?q=is:issue+is:closed) [![contribution](https://img.shields.io/badge/contributions-welcome-1E90FF.svg)](https://github.com/hueristiq/hq-lib-roundrobin-go/blob/main/CONTRIBUTING.md)
 
-`hq-lib-roundrobin-go` is a [Go](https://golang.org/) package providing a generic, concurrency-safe [round-robin](https://en.wikipedia.org/wiki/Round-robin_scheduling) selector.
+`hq-lib-roundrobin-go` is a [Go](https://golang.org/) package for a generic, concurrency-safe [round-robin](https://en.wikipedia.org/wiki/Round-robin_scheduling) selector.
 
 ## Table of Contents
 
