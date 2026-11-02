@@ -4,69 +4,75 @@
 
 `hq-lib-roundrobin-go` is a [Go](https://golang.org/) package for a generic, concurrency-safe [round-robin](https://en.wikipedia.org/wiki/Round-robin_scheduling) selector.
 
-## Table of Contents
+## Resources
 
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
-	- [Basic Rotation](#basic-rotation)
-	- [Rotate Amount](#rotate-amount)
-	- [Weighted Selection](#weighted-selection)
+	- [Basic rotation](#basic-rotation)
+	- [Rotate amount](#rotate-amount)
+	- [Weighted selection](#weighted-selection)
 	- [Statistics](#statistics)
 - [Contributing](#contributing)
 - [Licensing](#licensing)
 
 ## Features
 
-- **Generic Item Type:** `RoundRobin[T]` cycles through items of any comparable type — strings, URLs, structs, or your own values.
-- **Weighted Selection:** Per-item weights switch selection to smooth weighted round-robin, serving each item in proportion to its weight with picks spread evenly instead of bunched into runs.
-- **Configurable Rotation:** `SetRotateAmount` serves each item a fixed number of times in a row before advancing.
-- **Concurrency-Safe:** Every method is safe for concurrent use; mutable state is guarded by a single mutex and statistics counters are atomic.
-- **Deduplication & Removal:** Duplicate values are collapsed on add, and items can be removed by value at any time.
-- **Per-Item Statistics:** Track and reset serve counts per item, even after an item leaves the cycle.
+- **Generic items:** `RoundRobin[T]` cycles through any comparable type, including strings, URLs, and structs.
+- **Weighted selection:** per-item weights switch to smooth weighted round-robin with picks spread evenly.
+- **Configurable rotation:** `SetRotateAmount` serves each item a fixed number of times before advancing.
+- **Concurrency safe:** methods are safe for concurrent use, with a mutex for mutable state and atomic statistics.
+- **Deduplication and removal:** duplicate values collapse on add, and `Remove` deletes a value at any time.
+- **Per-item statistics:** track and reset serve counts, even after an item leaves the cycle.
 
 ## Installation
+
+To install `hq-lib-roundrobin-go`, run the following command in your Go project:
 
 ```bash
 go get github.com/hueristiq/hq-lib-roundrobin-go@latest
 ```
 
-Requires Go 1.23 or later.
+Requires Go 1.22.0 or later.
 
 ## Usage
 
-The examples import the package under the `hqgoroundrobin` alias:
+The examples import the package under the `hqgoroundrobin` alias.
+
+### Basic rotation
+
+`New` takes the initial items directly. Every call to `Next` serves the next item in the cycle, wrapping around in insertion order.
 
 ```go
-import hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
+package main
+
+import (
+	"fmt"
+
+	hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
+)
+
+func main() {
+	rr := hqgoroundrobin.New("server-1", "server-2", "server-3")
+
+	fmt.Println(rr.Next())
+	fmt.Println(rr.Next())
+	fmt.Println(rr.Next())
+	fmt.Println(rr.Next())
+
+	rr.Add("server-4")
+	rr.Remove("server-2")
+
+	fmt.Println(rr.Items())
+	fmt.Println(rr.Len())
+}
 ```
 
-### Basic Rotation
+`Add` appends items, `Remove` deletes a value, and `Items` returns a snapshot copy. Mutating the snapshot never affects the cycle.
 
-`New` takes the initial items directly; every call to `Next` serves the next item in the cycle, wrapping around in insertion order:
+### Rotate amount
 
-```go
-rr := hqgoroundrobin.New("server-1", "server-2", "server-3")
-
-fmt.Println(rr.Next()) // server-1
-fmt.Println(rr.Next()) // server-2
-fmt.Println(rr.Next()) // server-3
-fmt.Println(rr.Next()) // server-1
-```
-
-Items can also be added with `Add`, removed by value with `Remove`, and listed with `Items`, which returns a snapshot copy:
-
-```go
-rr.Add("server-4", "server-5")
-rr.Remove("server-3")
-
-fmt.Println(rr.Items()) // snapshot; mutating it never affects the cycle
-fmt.Println(rr.Len())
-```
-
-### Rotate Amount
-
-Use `SetRotateAmount` to serve each item several times in a row before advancing — useful when each pick should be reused for a batch:
+Use `SetRotateAmount` to serve each item several times in a row before advancing. This helps when each pick should be reused for a batch.
 
 ```go
 rr := hqgoroundrobin.New("a", "b")
@@ -79,27 +85,18 @@ fmt.Println(rr.Next()) // b
 fmt.Println(rr.Next()) // b
 ```
 
-### Weighted Selection
+### Weighted selection
 
-Use `AddWithWeight` to make some items be served more often. Once any item carries a non-default weight, selection switches to smooth weighted round-robin: in the steady state each item is picked in proportion to its `weight`, with picks spread across the cycle. When every item again carries the default weight — weights reset to `1`, or the weighted items removed — selection returns to strict rotation in insertion order. Adding a weight of `3` to one of two items:
+Use `AddWithWeight` to make some items serve more often. Once any item carries a non-default weight, selection switches to smooth weighted round-robin: in the steady state each item is picked in proportion to its weight, with picks spread across the cycle. When every item again carries the default weight, selection returns to strict rotation in insertion order.
 
 ```go
 rr := hqgoroundrobin.New("fast", "slow")
 
-rr.AddWithWeight("fast", 3) // re-adding an existing value updates its weight
+rr.AddWithWeight("fast", 3) // Re-adding an existing value updates its weight.
 
 for range 8 {
 	fmt.Println(rr.Next())
 }
-// Output:
-// fast
-// fast
-// slow
-// fast
-// fast
-// fast
-// slow
-// fast
 ```
 
 `NewWeighted` builds a weighted cycle in one call, drawing the initial weights from a map:
@@ -111,11 +108,11 @@ rr := hqgoroundrobin.NewWeighted(map[string]int{
 })
 ```
 
-Map iteration order is undefined; call `Add` first when a deterministic initial cycle order matters.
+Map iteration order is undefined. Call `Add` first when a deterministic initial cycle order matters.
 
 ### Statistics
 
-`StatisticsOf` returns a live, atomic view of an item's serve count:
+`StatisticsOf` returns a live, atomic view of an item's serve count.
 
 ```go
 rr := hqgoroundrobin.New("a", "b", "c")
@@ -125,31 +122,29 @@ for range 7 {
 }
 
 if stats, found := rr.StatisticsOf("a"); found {
-	fmt.Println(stats.ServesCount()) // 3
+	fmt.Println(stats.ServesCount())
 
 	stats.ResetServesCount()
 }
 ```
 
-An empty cycle is legal — `Next` returns the zero value of `T` and `NextOK` reports whether a serve was possible:
+An empty cycle is legal. `Next` returns the zero value of `T`, and `NextOK` reports whether a serve was possible.
 
 ```go
 rr := hqgoroundrobin.New[string]()
 
 if value, ok := rr.NextOK(); ok {
 	fmt.Println(value)
-
-	return
+} else {
+	fmt.Println("cycle is empty")
 }
-
-fmt.Println("cycle is empty")
 ```
 
 ## Contributing
 
 Contributions are welcome and encouraged! Feel free to submit [Pull Requests](https://github.com/hueristiq/hq-lib-roundrobin-go/pulls) or report [Issues](https://github.com/hueristiq/hq-lib-roundrobin-go/issues).
 
-A big thank you to all the [contributors](https://github.com/hueristiq/hq-lib-roundrobin-go/graphs/contributors) for their ongoing support!
+A big thank you to all the [contributors](https://github.com/hueristiq/hq-lib-roundrobin-go/graphs/contributors) for your ongoing support!
 
 ![contributors](https://contrib.rocks/image?repo=hueristiq/hq-lib-roundrobin-go&max=500)
 
