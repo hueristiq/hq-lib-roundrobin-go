@@ -33,7 +33,7 @@ To install `hq-lib-roundrobin-go`, run the following command in your Go project:
 go get github.com/hueristiq/hq-lib-roundrobin-go@latest
 ```
 
-Requires Go 1.22.0 or later.
+Requires Go 1.26.0 or later.
 
 ## Usage
 
