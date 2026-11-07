@@ -10,7 +10,7 @@ import (
 // whole set, optionally in proportion to per-item weights.
 //
 // T must be comparable: values double as map keys, which is what deduplication
-// on add, removal by value, and statistics lookup by value are built on.
+// on add and removal by value are built on.
 //
 // Selection order depends on the weights. While every item carries the default
 // weight, the cycle is strict rotation in insertion order. Once an item carries
@@ -21,7 +21,7 @@ import (
 // Removing items perturbs the order of the very next picks, but the long-run
 // distribution stays proportional to the weights.
 //
-// The zero value is not usable; construct through [New] or [NewWeighted]. A
+// The zero value is not usable; construct through [New]. A
 // RoundRobin must not be copied after first use.
 //
 // Type Parameters:
@@ -31,7 +31,7 @@ import (
 //   - mu (sync.Mutex): guards every field below.
 //   - items ([]*item[T]): items in the cycle, in insertion order.
 //   - index (map[T]*item[T]): items keyed by value, for deduplication, removal,
-//     and statistics lookup.
+//     and removal.
 //   - current (int): index into items of the item being served; -1 before the
 //     first serve.
 //   - serves (int): consecutive serves of the current item; advances at
@@ -52,7 +52,7 @@ type RoundRobin[T comparable] struct {
 }
 
 // Add appends items to the cycle, each with [DefaultWeight]. Values already
-// in the cycle are skipped: their weight and statistics are preserved.
+// in the cycle are skipped: their weights are preserved.
 //
 // Parameters:
 //   - items (...T): the values to add.
@@ -92,8 +92,7 @@ func (r *RoundRobin[T]) addLocked(items ...T) {
 // weight, with its picks spread across the cycle. Once every item carries the
 // default weight again, selection returns to strict rotation.
 //
-// Re-adding a value already in the cycle updates its weight and preserves its
-// statistics. A non-positive weight falls back to [DefaultWeight].
+// Re-adding a value already in the cycle updates its weight. A non-positive weight falls back to [DefaultWeight].
 //
 // Parameters:
 //   - value (T): the value to add.
@@ -174,8 +173,6 @@ func (r *RoundRobin[T]) updateWeighted() {
 // Remove drops value from the cycle; removing a value that is not in the cycle
 // is a no-op. When the removed item was the one being served, the next
 // [RoundRobin.Next] starts a fresh run on the item that follows it in the cycle.
-// The statistics of a removed item stay readable through a *Statistics obtained
-// earlier, but no longer change.
 //
 // Parameters:
 //   - value (T): the value to remove.
@@ -223,28 +220,11 @@ func (r *RoundRobin[T]) Remove(value T) (removed bool) {
 // weighted round-robin step otherwise. The served item's serve count is
 // incremented.
 //
-// Calling Next on an empty cycle — possible after every item was removed with
-// [RoundRobin.Remove], or when the cycle was created empty — returns the zero
-// value of T. Use [RoundRobin.NextOK] to distinguish an empty cycle from a
-// served zero value.
-//
-// Returns:
-//   - value (T): the value of the served item, or the zero value of T when the
-//     cycle is empty.
-func (r *RoundRobin[T]) Next() (value T) {
-	value, _ = r.NextOK()
-
-	return value
-}
-
-// NextOK serves the next item in the cycle like [RoundRobin.Next], additionally
-// reporting whether a serve was possible.
-//
 // Returns:
 //   - value (T): the value of the served item, or the zero value of T when the
 //     cycle is empty.
 //   - ok (bool): true when an item was served.
-func (r *RoundRobin[T]) NextOK() (value T, ok bool) {
+func (r *RoundRobin[T]) Next() (value T, ok bool) {
 	r.mu.Lock()
 
 	defer r.mu.Unlock()
@@ -262,7 +242,6 @@ func (r *RoundRobin[T]) NextOK() (value T, ok bool) {
 	r.serves++
 
 	it := r.items[r.current]
-	it.statistics.incrementServesCount()
 
 	return it.value, true
 }
@@ -296,30 +275,6 @@ func (r *RoundRobin[T]) Len() (n int) {
 	defer r.mu.Unlock()
 
 	return len(r.items)
-}
-
-// StatisticsOf returns a live view of the serve statistics of the item carrying
-// the given value. The returned pointer stays valid for the lifetime of the
-// round-robin instance, even after the item is removed from the cycle.
-//
-// Parameters:
-//   - value (T): the value whose statistics to look up.
-//
-// Returns:
-//   - statistics (*Statistics): the item's statistics, or nil when the value is
-//     not in the cycle.
-//   - found (bool): true when the value is in the cycle.
-func (r *RoundRobin[T]) StatisticsOf(value T) (statistics *Statistics, found bool) {
-	r.mu.Lock()
-
-	defer r.mu.Unlock()
-
-	it, found := r.index[value]
-	if !found {
-		return nil, false
-	}
-
-	return &it.statistics, true
 }
 
 // advance moves the selection to the next item. While no item carries a
@@ -361,14 +316,14 @@ const DefaultRotateAmount int = 1
 
 // DefaultWeight is the selection weight of items added through [RoundRobin.Add]
 // and [New], and the value non-positive weights passed to
-// [RoundRobin.AddWithWeight] and [NewWeighted] are normalized to.
+// [RoundRobin.AddWithWeight] are normalized to.
 const DefaultWeight = 1
 
 // New creates a [RoundRobin] cycling through the given items in order.
 //
 // Duplicate values are collapsed, keeping the first occurrence. An empty call
 // creates an empty cycle: items can be added later with [RoundRobin.Add], and
-// [RoundRobin.NextOK] reports whether a serve was possible.
+// [RoundRobin.Next] reports whether a serve was possible.
 //
 // Type Parameters:
 //   - T: the type of the items in the cycle; must be comparable.
@@ -387,37 +342,6 @@ func New[T comparable](items ...T) (rr *RoundRobin[T]) {
 	}
 
 	rr.addLocked(items...)
-
-	return rr
-}
-
-// NewWeighted creates a [RoundRobin] with per-item selection weights drawn from
-// weights. While any item carries a non-default weight, selection runs smooth
-// weighted round-robin (see [RoundRobin]). A non-positive weight falls back to
-// [DefaultWeight]. An empty map creates an empty cycle.
-//
-// Map iteration order is undefined; call [RoundRobin.Add] first when a
-// deterministic initial cycle order matters.
-//
-// Type Parameters:
-//   - T: the type of the items in the cycle; must be comparable.
-//
-// Parameters:
-//   - weights (map[T]int): the initial values and their selection weights.
-//
-// Returns:
-//   - rr (*RoundRobin[T]): the new round-robin instance.
-func NewWeighted[T comparable](weights map[T]int) (rr *RoundRobin[T]) {
-	rr = &RoundRobin[T]{
-		items:        make([]*item[T], 0, len(weights)),
-		index:        make(map[T]*item[T], len(weights)),
-		current:      -1,
-		rotateAmount: DefaultRotateAmount,
-	}
-
-	for value, weight := range weights {
-		rr.addWithWeightLocked(value, weight)
-	}
 
 	return rr
 }

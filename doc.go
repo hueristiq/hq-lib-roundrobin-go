@@ -10,13 +10,11 @@
 // # Entry points
 //
 // [New] builds a [RoundRobin] over an initial set of items, cycling through them
-// in order; [NewWeighted] builds one with per-item selection weights. Both accept
-// an empty initial set — items can be added later with [RoundRobin.Add] and
-// [RoundRobin.AddWithWeight]. [RoundRobin.Next] hands out the next item,
-// following the selection policy described below, and [RoundRobin.NextOK] does
-// the same while reporting whether a serve was possible. Items can be removed
-// with [RoundRobin.Remove], and inspected with [RoundRobin.Items],
-// [RoundRobin.Len], and [RoundRobin.StatisticsOf].
+// in order. An empty initial set is allowed: items can be added later with
+// [RoundRobin.Add] and weighted with [RoundRobin.AddWithWeight].
+// [RoundRobin.Next] hands out the next item and reports whether a serve was
+// possible. Items can be removed with [RoundRobin.Remove], and inspected with
+// [RoundRobin.Items] and [RoundRobin.Len].
 //
 // Selection order depends on the weights: while every item carries the default
 // weight, the cycle is strict rotation — items are served one after another in
@@ -31,13 +29,13 @@
 // The rotate amount — how many times in a row one item is served before the
 // selection advances to the next item — is set with
 // [RoundRobin.SetRotateAmount]; unset, it falls back to [DefaultRotateAmount].
-// Weights are per-item, set through [RoundRobin.AddWithWeight] and [NewWeighted];
-// a non-positive weight falls back to [DefaultWeight].
+// Weights are per-item, set through [RoundRobin.AddWithWeight]; a non-positive
+// weight falls back to [DefaultWeight].
 //
 // # Concurrency
 //
 // Every method is safe for concurrent use: all mutable state is guarded by a
-// single mutex, and per-item statistics counters are updated and read atomically.
+// single mutex.
 //
 // The implementation relies on the Go standard library only.
 package roundrobin

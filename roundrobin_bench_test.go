@@ -60,7 +60,7 @@ func BenchmarkRoundRobinNext(b *testing.B) {
 			var next string
 
 			for range b.N {
-				next = rr.Next()
+				next, _ = rr.Next()
 			}
 
 			nextSink = next
@@ -77,7 +77,7 @@ func BenchmarkRoundRobinNextParallel(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_ = rr.Next()
+			_, _ = rr.Next()
 		}
 	})
 }

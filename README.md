@@ -12,7 +12,6 @@
 	- [Basic rotation](#basic-rotation)
 	- [Rotate amount](#rotate-amount)
 	- [Weighted selection](#weighted-selection)
-	- [Statistics](#statistics)
 - [Contributing](#contributing)
 - [Licensing](#licensing)
 
@@ -21,9 +20,8 @@
 - **Generic items:** `RoundRobin[T]` cycles through any comparable type, including strings, URLs, and structs.
 - **Weighted selection:** per-item weights switch to smooth weighted round-robin with picks spread evenly.
 - **Configurable rotation:** `SetRotateAmount` serves each item a fixed number of times before advancing.
-- **Concurrency safe:** methods are safe for concurrent use, with a mutex for mutable state and atomic statistics.
+- **Concurrency safe:** methods are safe for concurrent use, with a mutex for mutable state.
 - **Deduplication and removal:** duplicate values collapse on add, and `Remove` deletes a value at any time.
-- **Per-item statistics:** track and reset serve counts, even after an item leaves the cycle.
 
 ## Installation
 
@@ -99,41 +97,12 @@ for range 8 {
 }
 ```
 
-`NewWeighted` builds a weighted cycle in one call, drawing the initial weights from a map:
-
-```go
-rr := hqgoroundrobin.NewWeighted(map[string]int{
-	"fast": 3,
-	"slow": 1,
-})
-```
-
-Map iteration order is undefined. Call `Add` first when a deterministic initial cycle order matters.
-
-### Statistics
-
-`StatisticsOf` returns a live, atomic view of an item's serve count.
-
-```go
-rr := hqgoroundrobin.New("a", "b", "c")
-
-for range 7 {
-	rr.Next()
-}
-
-if stats, found := rr.StatisticsOf("a"); found {
-	fmt.Println(stats.ServesCount())
-
-	stats.ResetServesCount()
-}
-```
-
-An empty cycle is legal. `Next` returns the zero value of `T`, and `NextOK` reports whether a serve was possible.
+An empty cycle is legal. `Next` returns the zero value of `T` and reports whether a serve was possible.
 
 ```go
 rr := hqgoroundrobin.New[string]()
 
-if value, ok := rr.NextOK(); ok {
+if value, ok := rr.Next(); ok {
 	fmt.Println(value)
 } else {
 	fmt.Println("cycle is empty")
