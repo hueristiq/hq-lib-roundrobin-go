@@ -7,19 +7,8 @@ import (
 	hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
 )
 
-// nextSink keeps benchmark results alive so the compiler cannot optimise the
-// measured calls away.
 var nextSink string
 
-// newStringRoundRobin builds a round-robin of n distinct values named after
-// their index.
-//
-// Parameters:
-//   - b (*testing.B): the benchmark, used to report setup failures.
-//   - n (int): the number of items in the cycle.
-//
-// Returns:
-//   - rr (*hqgoroundrobin.RoundRobin[string]): the constructed cycle.
 func newStringRoundRobin(b *testing.B, n int) (rr *hqgoroundrobin.RoundRobin[string]) {
 	b.Helper()
 
@@ -34,9 +23,6 @@ func newStringRoundRobin(b *testing.B, n int) (rr *hqgoroundrobin.RoundRobin[str
 	return
 }
 
-// BenchmarkRoundRobinNext measures the cost of serving the next item from a
-// moderately sized cycle, comparing strict rotation against a weighted cycle
-// where selection runs a smooth weighted round-robin step.
 func BenchmarkRoundRobinNext(b *testing.B) {
 	cases := []struct {
 		name    string
@@ -68,8 +54,6 @@ func BenchmarkRoundRobinNext(b *testing.B) {
 	}
 }
 
-// BenchmarkRoundRobinNextParallel measures the throughput of serving the next
-// item under contention, with many goroutines hammering a shared cycle.
 func BenchmarkRoundRobinNextParallel(b *testing.B) {
 	rr := newStringRoundRobin(b, 100)
 

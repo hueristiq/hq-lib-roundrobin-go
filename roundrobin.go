@@ -30,8 +30,8 @@ import (
 // Fields:
 //   - mu (sync.Mutex): guards every field below.
 //   - items ([]*item[T]): items in the cycle, in insertion order.
-//   - index (map[T]*item[T]): items keyed by value, for deduplication, removal,
-//     and removal.
+//   - index (map[T]*item[T]): items keyed by value, for deduplication and
+//     removal by value.
 //   - current (int): index into items of the item being served; -1 before the
 //     first serve.
 //   - serves (int): consecutive serves of the current item; advances at
@@ -282,7 +282,8 @@ func (r *RoundRobin[T]) Len() (n int) {
 // one step of smooth weighted round-robin — add each item's weight to its
 // current weight, pick the heaviest, and subtract the total weight from the
 // pick. In the steady state this selects each item in proportion to its
-// weight, spreading its picks across the window.
+// weight, spreading its picks across the window. The caller must hold
+// [RoundRobin.mu].
 func (r *RoundRobin[T]) advance() {
 	if !r.weighted {
 		r.current = (r.current + 1) % len(r.items)

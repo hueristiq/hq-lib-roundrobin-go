@@ -12,8 +12,6 @@ import (
 	hqgoroundrobin "github.com/hueristiq/hq-lib-roundrobin-go"
 )
 
-// weightedValue pairs a value with its selection weight for weighted test cases,
-// giving them a deterministic order instead of map iteration.
 type weightedValue struct {
 	value  string
 	weight int
@@ -476,7 +474,6 @@ func TestConcurrentAccess(t *testing.T) {
 	})
 }
 
-// ExampleNew demonstrates strict rotation over a fixed set of items.
 func ExampleNew() {
 	rr := hqgoroundrobin.New("server-1", "server-2", "server-3")
 
@@ -492,7 +489,6 @@ func ExampleNew() {
 	// server-3
 }
 
-// ExampleRoundRobin_AddWithWeight demonstrates smooth weighted round-robin selection.
 func ExampleRoundRobin_AddWithWeight() {
 	rr := hqgoroundrobin.New("fast", "slow")
 
@@ -512,7 +508,6 @@ func ExampleRoundRobin_AddWithWeight() {
 	// fast
 }
 
-// ExampleRoundRobin_Next demonstrates explicit handling of an empty cycle.
 func ExampleRoundRobin_Next() {
 	rr := hqgoroundrobin.New[string]()
 
@@ -526,9 +521,6 @@ func ExampleRoundRobin_Next() {
 	// Output: cycle is empty
 }
 
-// FuzzAddRemoveNext exercises construction, serving, and removal over arbitrary
-// value lists: the cycle must never panic, duplicate values must collapse, and
-// removing every value must always empty the cycle.
 func FuzzAddRemoveNext(f *testing.F) {
 	f.Add("a b c")
 	f.Add("a")
