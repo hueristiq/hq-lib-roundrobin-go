@@ -17,11 +17,11 @@
 
 ## Features
 
-- **Generic items:** `RoundRobin[T]` cycles through any comparable type, including strings, URLs, and structs.
-- **Weighted selection:** per-item weights switch to smooth weighted round-robin with picks spread evenly.
-- **Configurable rotation:** `SetRotateAmount` serves each item a fixed number of times before advancing.
-- **Concurrency safe:** methods are safe for concurrent use, with a mutex for mutable state.
-- **Deduplication and removal:** duplicate values collapse on add, and `Remove` deletes a value at any time.
+- **Selection:** `RoundRobin[T]` cycles through any comparable type.
+- **Weights:** `AddWithWeight` enables smooth weighted selection.
+- **Rotation:** `SetRotateAmount` repeats each item before advancing.
+- **Membership:** duplicate adds collapse; `Remove` deletes by value.
+- **Concurrency:** all methods are safe for concurrent use.
 
 ## Installation
 
@@ -107,6 +107,28 @@ if value, ok := rr.Next(); ok {
 } else {
 	fmt.Println("cycle is empty")
 }
+```
+
+### Concurrent use
+
+All methods are safe for concurrent use.
+
+```go
+rr := hqgoroundrobin.New("a", "b")
+
+var wg sync.WaitGroup
+
+for range 10 {
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+
+		rr.Next()
+	}()
+}
+
+wg.Wait()
 ```
 
 ## Contributing

@@ -53,9 +53,6 @@ type RoundRobin[T comparable] struct {
 
 // Add appends items to the cycle, each with [DefaultWeight]. Values already
 // in the cycle are skipped: their weights are preserved.
-//
-// Parameters:
-//   - items (...T): the values to add.
 func (r *RoundRobin[T]) Add(items ...T) {
 	r.mu.Lock()
 
@@ -66,9 +63,6 @@ func (r *RoundRobin[T]) Add(items ...T) {
 
 // addLocked appends items to the cycle with [DefaultWeight], skipping values
 // already in the cycle. The caller must hold [RoundRobin.mu].
-//
-// Parameters:
-//   - items (...T): the values to add.
 func (r *RoundRobin[T]) addLocked(items ...T) {
 	for _, value := range items {
 		if _, exists := r.index[value]; exists {
@@ -93,10 +87,6 @@ func (r *RoundRobin[T]) addLocked(items ...T) {
 // default weight again, selection returns to strict rotation.
 //
 // Re-adding a value already in the cycle updates its weight. A non-positive weight falls back to [DefaultWeight].
-//
-// Parameters:
-//   - value (T): the value to add.
-//   - weight (int): the relative selection weight of the item.
 func (r *RoundRobin[T]) AddWithWeight(value T, weight int) {
 	r.mu.Lock()
 
@@ -108,10 +98,6 @@ func (r *RoundRobin[T]) AddWithWeight(value T, weight int) {
 // addWithWeightLocked adds value with weight to the cycle, updating the weight
 // of a value already in the cycle and recomputing the weighted flag. The caller
 // must hold [RoundRobin.mu].
-//
-// Parameters:
-//   - value (T): the value to add.
-//   - weight (int): the relative selection weight of the item.
 func (r *RoundRobin[T]) addWithWeightLocked(value T, weight int) {
 	if weight <= 0 {
 		weight = DefaultWeight
@@ -138,9 +124,6 @@ func (r *RoundRobin[T]) addWithWeightLocked(value T, weight int) {
 // SetRotateAmount sets how many times in a row one item is served before the
 // selection advances to the next item. A non-positive value falls back to
 // [DefaultRotateAmount].
-//
-// Parameters:
-//   - rotateAmount (int): the number of consecutive serves per item.
 func (r *RoundRobin[T]) SetRotateAmount(rotateAmount int) {
 	if rotateAmount <= 0 {
 		rotateAmount = DefaultRotateAmount
@@ -173,12 +156,6 @@ func (r *RoundRobin[T]) updateWeighted() {
 // Remove drops value from the cycle; removing a value that is not in the cycle
 // is a no-op. When the removed item was the one being served, the next
 // [RoundRobin.Next] starts a fresh run on the item that follows it in the cycle.
-//
-// Parameters:
-//   - value (T): the value to remove.
-//
-// Returns:
-//   - removed (bool): true when the value was in the cycle.
 func (r *RoundRobin[T]) Remove(value T) (removed bool) {
 	r.mu.Lock()
 
@@ -219,11 +196,6 @@ func (r *RoundRobin[T]) Remove(value T) (removed bool) {
 // stepping cyclically while all weights are equal, or running one smooth
 // weighted round-robin step otherwise. The served item's serve count is
 // incremented.
-//
-// Returns:
-//   - value (T): the value of the served item, or the zero value of T when the
-//     cycle is empty.
-//   - ok (bool): true when an item was served.
 func (r *RoundRobin[T]) Next() (value T, ok bool) {
 	r.mu.Lock()
 
@@ -248,9 +220,6 @@ func (r *RoundRobin[T]) Next() (value T, ok bool) {
 
 // Items returns a snapshot copy of the values currently in the cycle, in cycle
 // order. Mutating the returned slice never affects the round-robin state.
-//
-// Returns:
-//   - items ([]T): the values in the cycle.
 func (r *RoundRobin[T]) Items() (items []T) {
 	r.mu.Lock()
 
@@ -266,9 +235,6 @@ func (r *RoundRobin[T]) Items() (items []T) {
 }
 
 // Len returns the number of items in the cycle.
-//
-// Returns:
-//   - n (int): the number of items.
 func (r *RoundRobin[T]) Len() (n int) {
 	r.mu.Lock()
 
@@ -328,12 +294,6 @@ const DefaultWeight = 1
 //
 // Type Parameters:
 //   - T: the type of the items in the cycle; must be comparable.
-//
-// Parameters:
-//   - items (...T): the initial values of the cycle, in cycle order.
-//
-// Returns:
-//   - rr (*RoundRobin[T]): the new round-robin instance.
 func New[T comparable](items ...T) (rr *RoundRobin[T]) {
 	rr = &RoundRobin[T]{
 		items:        make([]*item[T], 0, len(items)),
